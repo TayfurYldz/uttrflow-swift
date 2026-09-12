@@ -29,9 +29,10 @@ public struct MeaningPreservationGuard: Sendable {
     /// Makes a guard; it holds no state.
     public init() {}
 
-    /// Judges the rewrite against the kept words, the readings offered, and the echo a pass took back after it.
+    /// Judges the rewrite against the kept words, the readings offered, the echo a pass took back, and the layout allowed.
     public func verdict(
-        draft: Draft, rewritten: String, offering doubtful: [DoubtfulSpan] = [], echoed: String = ""
+        draft: Draft, rewritten: String, offering doubtful: [DoubtfulSpan] = [], echoed: String = "",
+        layout: LayoutPolicy = [.paragraphs, .lists]
     ) -> GuardVerdict {
         if case .rejected(let reason) = verdict(original: draft.text, rewritten: rewritten) {
             return .rejected(reason: reason)
@@ -41,7 +42,9 @@ public struct MeaningPreservationGuard: Sendable {
         if case .rejected(let reason) = readings.verdict {
             return .rejected(reason: reason)
         }
-        if case .rejected(let reason) = Self.layoutVerdict(kept: draft.text, rewritten: rewritten) {
+        if case .rejected(let reason) = Self.layoutVerdict(
+            kept: draft.text, rewritten: rewritten, layout: layout)
+        {
             return .rejected(reason: reason)
         }
         return Self.grammarVerdict(
@@ -130,13 +133,29 @@ public struct MeaningPreservationGuard: Sendable {
     }
 
     /// Refuses a rewrite that flattened a break the speaker asked for, since layout is the passes' to decide.
-    static func layoutVerdict(kept: String, rewritten: String) -> GuardVerdict {
+    static func layoutVerdict(
+        kept: String, rewritten: String, layout: LayoutPolicy = [.paragraphs, .lists]
+    ) -> GuardVerdict {
         let wanted = breaks(in: kept)
         let got = breaks(in: rewritten)
         guard wanted.paragraphs <= got.paragraphs, wanted.lines <= got.lines else {
             return .rejected(reason: "the rewrite dropped a line break the speaker asked for")
         }
+        // A list may be laid out and never composed, so one may appear only where the destination lays them out.
+        guard layout.contains(.lists) || listMarks(in: rewritten) <= listMarks(in: kept) else {
+            return .rejected(reason: "the rewrite composed a list the speaker did not speak")
+        }
+        // Somewhere with no paragraphs to make, a break the speaker did not ask for is the model's own shape.
+        guard layout.contains(.paragraphs) || got.paragraphs + got.lines <= wanted.paragraphs + wanted.lines
+        else {
+            return .rejected(reason: "the rewrite added a line break the speaker did not ask for")
+        }
         return .accepted
+    }
+
+    /// List items, counted the way every pass counts them, so the guard and the passes agree on what one is.
+    private static func listMarks(in text: String) -> Int {
+        Draft(keepingLineBreaks: text).words.count { $0.isListMark }
     }
 
     /// Paragraph breaks and line breaks, counting a paragraph as one break rather than two lines.
