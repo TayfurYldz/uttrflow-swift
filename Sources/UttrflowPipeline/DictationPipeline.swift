@@ -607,7 +607,8 @@ public actor DictationPipeline {
         let request = TransformationRequest(
             transcription: transcription.saying(corrected), context: appContext, profile: profile,
             situation: SituationResolver.resolve(from: appContext, overrides: runningOverrides))
-        let untidied = TransformationResult(text: text, producedBy: .rules)
+        // Not `.rules`: no pass ran over these words, and a record that says otherwise cannot be read.
+        let untidied = TransformationResult(text: text, producedBy: .untidied)
 
         do {
             let tidied = try await metrics.measuring(.transformation, clock: clock) {

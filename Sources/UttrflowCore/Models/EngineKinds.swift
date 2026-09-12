@@ -18,6 +18,8 @@ public enum TransformerKind: String, Sendable, Equatable, CaseIterable, Codable 
     case rules
     /// A hosted model. Compiled in only when `UTTRFLOW_CLOUD` is defined.
     case cloud
+    /// Nothing tidied the words: every engine was starved or refused, so the transcript went in as heard.
+    case untidied
 
     /// The kinds this binary contains; the app defines neither build flag. See `Docs/core-engine-kinds.md`.
     public static var selectable: [TransformerKind] {
@@ -37,6 +39,9 @@ public enum TransformerKind: String, Sendable, Equatable, CaseIterable, Codable 
                 #endif
             case .foundationModels, .rules:
                 true
+            // Not an engine anybody can choose: it is what the record says when none of them ran.
+            case .untidied:
+                false
             }
         }
     }
