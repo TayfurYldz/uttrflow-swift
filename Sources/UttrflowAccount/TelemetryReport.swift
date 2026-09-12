@@ -52,14 +52,14 @@ public enum TelemetryStage: String, Sendable, Equatable, CaseIterable, Codable {
     case tidying
     case insertion
 
-    /// `nil` for correction and expansion, which the server cannot name. See Docs/account-telemetry.md.
+    /// `nil` for correction, expansion and the drain, which the server cannot name. See Docs/account-telemetry.md.
     public init?(_ stage: PipelineStage) {
         switch stage {
         case .capture: self = .audioCapture
         case .transcription: self = .transcription
         case .transformation: self = .tidying
         case .insertion: self = .insertion
-        case .correction, .expansion: return nil
+        case .correction, .expansion, .drain: return nil
         }
     }
 }

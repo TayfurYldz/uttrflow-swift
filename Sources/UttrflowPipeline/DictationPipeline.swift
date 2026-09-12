@@ -403,7 +403,10 @@ public actor DictationPipeline {
 
         // A piece under way is finished, not thrown away: its words are needed either way.
         earlyWork?.cancel()
-        await earlyWork?.value
+        // Measured, because the user waits through it: it begins after they let the key go.
+        if let earlyWork {
+            await metrics.measuring(.drain, clock: clock) { await earlyWork.value }
+        }
         earlyWork = nil
         var spans = earlySpans
         var cut = earlyCut

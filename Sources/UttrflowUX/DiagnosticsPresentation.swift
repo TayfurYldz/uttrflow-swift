@@ -321,6 +321,7 @@ public enum DiagnosticsPresenter {
     static func title(for stage: PipelineStage) -> String {
         switch stage {
         case .capture: "Recording"
+        case .drain: "Finishing the piece already under way"
         case .transcription: "Transcribing"
         case .correction: "Checking the dictionary"
         case .transformation: "Tidying up"
