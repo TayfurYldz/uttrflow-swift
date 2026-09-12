@@ -144,16 +144,21 @@ configuration nobody runs.
 
 ### Shipping fails five of thirty-six
 
+Of the corpus as it stood when this was run; it has grown since, and the count is that run's.
+
 | case | score | |
 |---|---|---|
 | `self-correction` | 78% | "at four no sorry at five" — open since Phase 3b |
 | `hinglish-request` | 43% | the reference may be one of several fair phrasings |
 | `sql-editor-totals` | 40% | **deliberate — see below** |
-| `slack-name-spelling` | 91% | lost "Marcie" |
-| `editor-selected-identifier` | 85% | lost "setUserPrefs" |
+| `slack-name-spelling` | 91% | lost "Marcie" — **stale: measured with the candidate path off** |
+| `editor-selected-identifier` | 85% | lost "setUserPrefs" — **stale, same reason** |
 
 The last two are the feature's own job going wrong: the spelling was on screen and the
-model did not take it. They are real misses, not design decisions.
+model did not take it. They are real misses, not design decisions — but neither score
+describes the shipping path any more, for the reason set out below: both cases declared no
+doubtful run when they were measured, so neither was ever handed the spelling by name. Read
+them as "the model did not notice it unaided", which is a different claim.
 
 Measured directly, the name miss has a shape worth knowing, because it is the difference
 between a bug and a boundary. The model takes a spelling off the screen only when the one
@@ -172,6 +177,12 @@ never asked of a candidate source — so the model was never handed `Marcie` and
 measures it noticing a spelling unaided. The case declares its run now, and the rule below
 is what the old runs suggested rather than what the shipping path does; it needs re-measuring.
 
+**What follows is the rule those runs suggested, not a measurement of the shipping path.**
+It is kept because the shape of it is still the question — when may a title overrule a name
+the speaker apparently said — and because re-measuring it is a job with a command attached
+rather than an open question. Until that run happens, treat every sentence in this section
+as a hypothesis.
+
 "Nikhel" is not a spelling anyone uses, so the title wins. "Marcy", "Sara" and "Jon" are
 all real names, and the model will not overrule a name the speaker apparently said with a
 different one it can see. Two of those three rows are the conservative answer: the person
@@ -179,6 +190,12 @@ in the window may well be a Jonathan who everyone calls Jon, and writing "Jonath
 because a title said so would be putting a word in the speaker's mouth. `Marcie` is the
 row that is genuinely wrong — nobody says "Marcy" meaning "Marcie" — and there is no
 wording found so far that fixes it without also breaking the other two.
+
+**What the re-measurement has to answer** is narrower than it looks: now that the case
+declares its doubtful run, the model is handed `Marcie` as a candidate rather than being left
+to notice it. The four rows above measure the second of those, and the rule was written from
+them. Whether the first behaves the same way is unmeasured, and it is the whole question —
+`make bakeoff`, or the single-case command below.
 
 Reproduce any row with:
 
