@@ -307,7 +307,7 @@ struct DictationPipelineRecoveryTests {
         // Capture is draining and converting the buffer; the hold itself is `spokenFor`, not a stage.
         #expect(
             measurements.map(\.stage) == [
-                .capture, .transcription, .correction, .transformation, .expansion, .insertion,
+                .capture, .drain, .transcription, .correction, .transformation, .expansion, .insertion,
             ])
         #expect(measurements.allSatisfy { $0.succeeded })
         #expect(
