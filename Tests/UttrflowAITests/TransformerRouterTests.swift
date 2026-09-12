@@ -216,7 +216,13 @@ struct PromptContractTests {
         #expect(PromptBuilder.version >= 1)
     }
 
-    // MARK: - One engine's hang is not another's
+}
+
+/// One engine's allowance is its own, so a hang cannot spend the floor's turn.
+@Suite("Each engine's own allowance")
+struct TransformerBudgetTests {
+    /// A fixture request.
+    private let request = TransformationRequest(transcription: .fixture())
 
     /// The floor exists for exactly this case, and used to sit inside the budget the model had spent.
     @Test("lets the floor answer when the model never does", .timeLimit(.minutes(1)))
