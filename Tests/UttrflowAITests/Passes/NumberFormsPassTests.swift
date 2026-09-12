@@ -350,6 +350,7 @@ struct NumberWordsTests {
         #expect(DestinationFormatter.standard(for: .document).digits == .thousands)
         #expect(DestinationFormatter.standard(for: .sqlEditor).digits == .none)
         #expect(DestinationFormatter.standard(for: .codeEditor).digits == .none)
-        #expect(DestinationFormatter.standard(for: .spreadsheet).digits == .none)
+        // A cell keeps its separators: the corpus's own reference for a spreadsheet is "12,000".
+        #expect(DestinationFormatter.standard(for: .spreadsheet).digits == .thousands)
     }
 }

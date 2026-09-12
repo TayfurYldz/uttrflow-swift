@@ -96,7 +96,7 @@ public struct DestinationFormatter: Sendable, Equatable {
             promptBlock: "document"),
         .spreadsheet: DestinationFormatter(
             destination: .spreadsheet, firstWord: .asSpoken, terminalStop: .never, layout: .singleLine,
-            grammar: .asSpoken, numbers: .always, digits: .none, promptBlock: "spreadsheet"),
+            grammar: .asSpoken, numbers: .always, promptBlock: "spreadsheet"),
         .sqlEditor: DestinationFormatter(
             destination: .sqlEditor, firstWord: .fromInsertionPoint, terminalStop: .always,
             layout: .preserveNewlines, grammar: .asSpoken, numbers: .always, digits: .none,
