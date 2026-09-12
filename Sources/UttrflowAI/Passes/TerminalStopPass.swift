@@ -75,27 +75,6 @@ public struct TerminalStopPass: CleaningPass {
         return marks.last(where: { $0.text.hasPrefix("\n\n") || $0.isListMark })?.isListMark ?? false
     }
 
-    /// How many sentences the text holds, counting a last one that has no mark yet.
-    static func sentenceCount(_ text: String) -> Int {
-        var count = 0
-        var openSentence = false
-        let characters = Array(text)
-        for (index, character) in characters.enumerated() {
-            if sentenceEnds.contains(character) {
-                let next = index + 1 < characters.count ? characters[index + 1] : nil
-                // A stop between two digits is a decimal point, not the end of a sentence.
-                let insideNumber = character == "." && (next?.isNumber ?? false)
-                let endsHere = next == nil || (next?.isWhitespace ?? false)
-                if openSentence, endsHere, !insideNumber {
-                    count += 1
-                    openSentence = false
-                }
-            } else if !character.isWhitespace {
-                openSentence = true
-            }
-        }
-        return count + (openSentence ? 1 : 0)
-    }
-
-    private static let sentenceEnds: Set<Character> = [".", "!", "?"]
+    /// How many sentences the text holds; the joiner asks the same question of a whole dictation.
+    static func sentenceCount(_ text: String) -> Int { SentenceCount.of(text) }
 }

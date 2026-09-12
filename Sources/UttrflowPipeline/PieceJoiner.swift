@@ -42,7 +42,24 @@ enum PieceJoiner {
             corrected: CorrectedTranscript(
                 text: correctedText.joined(separator: " "), corrections: corrections),
             cleaned: TransformationResult(
-                text: laidOut(pieces.map(\.cleaned.text), under: formatter), producedBy: producedBy))
+                text: finishedWhole(
+                    laidOut(pieces.map(\.cleaned.text), under: formatter),
+                    spokenAs: pieces.map(\.cleaned.text), under: formatter),
+                producedBy: producedBy))
+    }
+
+    /// The final stop, asked of the whole message rather than of its last piece. See `Docs/cleanup-design.md` §7.
+    static func finishedWhole(
+        _ joined: String, spokenAs pieces: [String], under formatter: DestinationFormatter
+    ) -> String {
+        // Only the short-message rule reads the length of the text, so only it can be answered by the wrong scope.
+        guard case .offForShortMessages(let sentences) = formatter.terminalStop,
+            let last = joined.last, !last.isNewline
+        else { return joined }
+        // Counted per piece and summed: each piece has already had its own stop taken back, so the joined
+        // text reads as fewer sentences than were spoken.
+        let spoken = pieces.reduce(0) { $0 + SentenceCount.of($1) }
+        return spoken > sentences ? WordShape.finished(joined) : WordShape.withoutTrailingStop(joined)
     }
 
     /// The cleaned pieces as one text: a spoken list, a paragraph at a topic, a restatement across the seam, else a space.
