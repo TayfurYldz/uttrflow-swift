@@ -19,7 +19,8 @@ extension CleaningPipeline {
     ) -> CleaningPipeline {
         let cleanings: [any CleaningPass] = [
             FillersPass(), StammersPass(), RepeatedPhrasePass(), SelfCorrectionPass(),
-            SpokenPunctuationPass(), LayoutWordsPass(), NumberFormsPass(policy: formatter.numbers),
+            SpokenPunctuationPass(), LayoutWordsPass(),
+            NumberFormsPass(policy: formatter.numbers, digits: formatter.digits),
             ContractionsPass(), SpacingPass(),
         ]
         return CleaningPipeline(
