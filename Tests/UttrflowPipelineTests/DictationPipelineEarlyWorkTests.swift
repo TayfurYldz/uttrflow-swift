@@ -440,7 +440,8 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let outcome = await pipeline.currentState.outcome
-        #expect(outcome?.text == "W1 X W2 X W3 X")
+        // Three pieces are three sentences, which is past the short-message rule, so the message ends stopped.
+        #expect(outcome?.text == "W1 X W2 X W3 X.")
         #expect(outcome?.changes.corrections.map(\.wordRange) == [0..<1, 2..<3, 4..<5])
         #expect(outcome?.changes.spokenWords == 6)
     }
@@ -455,7 +456,7 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let outcome = await pipeline.currentState.outcome
-        #expect(outcome?.text == "W1 X w2 x W3 X")
+        #expect(outcome?.text == "W1 X w2 x W3 X.")
         #expect(outcome?.cleanedBy == .rules)
     }
 
