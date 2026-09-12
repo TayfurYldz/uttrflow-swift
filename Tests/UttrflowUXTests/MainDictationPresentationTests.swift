@@ -340,10 +340,10 @@ struct DictationFiguresTests {
                 changes: [HistoryFixture.change("s q l", "SQL", over: 1..<4)])
         ])
 
-        let figure = page.figures.first { $0.caption == "Accuracy" }
+        let figure = page.figures.first { $0.caption == DictationPresenter.accuracyTitle }
         #expect(figure?.value == "40.0%")
         #expect(figure?.meters.map(\.label) == ["Today"])
-        #expect(figure?.comment == "Words that came out exactly as you said them.")
+        #expect(figure?.comment == DictationPresenter.accuracyCaption)
     }
 
     /// Two changes whose ranges sum past the text length must still count the word between them.
@@ -358,7 +358,7 @@ struct DictationFiguresTests {
                 ])
         ])
         // One of the six words said — "and" — survives untouched.
-        #expect(page.figures.first { $0.caption == "Accuracy" }?.value == "16.7%")
+        #expect(page.figures.first { $0.caption == DictationPresenter.accuracyTitle }?.value == "16.7%")
     }
 
     /// Snippets are not counted: the trigger words were heard correctly, so they cannot inflate the figure.
@@ -379,11 +379,12 @@ struct DictationFiguresTests {
         // Three of the six words said came out as said; dividing by the eleven written would give 72.7%.
         #expect(
             HistoryFixture.dictation(entries: [entry])
-                .figures.first { $0.caption == "Accuracy" }?.value == "50.0%")
+                .figures.first { $0.caption == DictationPresenter.accuracyTitle }?.value == "50.0%")
     }
 
-    @Test("accuracy is drawn against the baseline once there is one")
-    func accuracyBaseline() {
+    /// The figure is near enough 100% for everybody, so yesterday's copy of it compared nothing.
+    @Test("draws today alone, with no baseline to compare against")
+    func drawsNoBaseline() {
         let page = HistoryFixture.dictation(entries: [
             HistoryFixture.measured(
                 "one two three four", spokenWords: 4,
@@ -394,12 +395,18 @@ struct DictationFiguresTests {
                 daysAgo: 1),
         ])
 
-        let figure = page.figures.first { $0.caption == "Accuracy" }
-        #expect(figure?.meters.map(\.label) == ["Today", "Baseline"])
-        #expect(figure?.meters.last?.isBaseline == true)
-        #expect(
-            figure?.comment
-                == "Words that came out exactly as you said them. Your baseline is 50.0%.")
+        let figure = page.figures.first { $0.caption == DictationPresenter.accuracyTitle }
+        #expect(figure?.meters.map(\.label) == ["Today"])
+        #expect(figure?.meters.contains { $0.isBaseline } == false)
+        #expect(figure?.comment == DictationPresenter.accuracyCaption)
+    }
+
+    /// The name is the fix: the number says what the clean-up left, not what the recogniser heard.
+    @Test("names the figure for what it measures")
+    func namesWhatItMeasures() {
+        #expect(DictationPresenter.accuracyTitle == "Left as dictated")
+        #expect(DictationPresenter.accuracyCaption.contains("does not say"))
+        #expect(!DictationPresenter.accuracyTitle.contains("Accuracy"))
     }
 
     /// An accuracy of 100% computed from no evidence is a number, not a measurement.
@@ -407,7 +414,7 @@ struct DictationFiguresTests {
     func accuracyNeedsARecord() {
         let page = HistoryFixture.dictation(
             entries: [HistoryFixture.entry("one two", changes: nil)])
-        #expect(!page.figures.contains { $0.caption == "Accuracy" })
+        #expect(!page.figures.contains { $0.caption == DictationPresenter.accuracyTitle })
     }
 
     /// Changes kept without the utterance counted have no denominator, so they leave the sample.
@@ -416,7 +423,7 @@ struct DictationFiguresTests {
         let page = HistoryFixture.dictation(entries: [
             HistoryFixture.entry("one two", changes: RecordedChanges())
         ])
-        #expect(!page.figures.contains { $0.caption == "Accuracy" })
+        #expect(!page.figures.contains { $0.caption == DictationPresenter.accuracyTitle })
     }
 
     /// An unmeasured dictation leaves the sample instead of hiding the figure for the measured ones.
@@ -429,7 +436,7 @@ struct DictationFiguresTests {
             HistoryFixture.entry("salvaged", changes: nil),
         ])
         // Three of the measured dictation's four spoken words survive; the salvaged one is in neither half.
-        #expect(page.figures.first { $0.caption == "Accuracy" }?.value == "75.0%")
+        #expect(page.figures.first { $0.caption == DictationPresenter.accuracyTitle }?.value == "75.0%")
     }
 
     @Test("nothing said means no accuracy either")
@@ -446,7 +453,7 @@ struct DictationFiguresTests {
                 "One", spokenWords: 1,
                 changes: [HistoryFixture.change("one two three", "One", over: 0..<3)])
         ])
-        #expect(page.figures.first { $0.caption == "Accuracy" }?.value == "0.0%")
+        #expect(page.figures.first { $0.caption == DictationPresenter.accuracyTitle }?.value == "0.0%")
     }
 
     @Test("a page nobody can use has no figures on it")
