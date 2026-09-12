@@ -151,8 +151,14 @@ public enum DictationPresenter {
     /// How many earlier days the pace and accuracy comparisons need before "your usual" is said.
     static let comparisonFloor = 1
 
-    /// What the accuracy figure measures, shared with Insights; the denominator is the words said.
-    static let accuracyCaption = "Words that came out exactly as you said them."
+    /// The figure's name, shared with Insights, saying what is measured rather than what a user hopes it means.
+    static let accuracyTitle = "Left as dictated"
+
+    /// What the figure measures, shared with Insights; the denominator is the words said.
+    static let accuracyCaption = """
+        The share of your words the clean-up left exactly as you said them. It does not say \
+        whether they were heard correctly.
+        """
 
     /// Draws the Dictation page from a snapshot.
     public static func page(
@@ -314,19 +320,12 @@ public enum DictationPresenter {
         }
 
         if let accuracy = accuracy(of: today) {
-            let baseline =
-                earlier.count >= comparisonFloor ? self.accuracy(of: earlier) : nil
             figures.append(
                 MainStatistic(
                     value: MainFormatting.percentage(accuracy, locale: locale),
-                    caption: "Accuracy",
-                    comment: baseline.map {
-                        """
-                        \(Self.accuracyCaption) Your baseline is \
-                        \(MainFormatting.percentage($0, locale: locale)).
-                        """
-                    } ?? Self.accuracyCaption,
-                    meters: meters(now: accuracy, baseline: baseline)))
+                    caption: Self.accuracyTitle,
+                    comment: Self.accuracyCaption,
+                    meters: [MainMeter(label: "Today", fraction: accuracy)]))
         }
 
         return figures
@@ -376,15 +375,6 @@ public enum DictationPresenter {
         }
         // Every day kept is in the run, so the run is bounded by what is kept, not by when the user started.
         return (run, run == days.count && days.count > 1)
-    }
-
-    /// Today's accuracy as a meter, with the baseline beside it when there is one.
-    static func meters(now: Double, baseline: Double?) -> [MainMeter] {
-        var meters = [MainMeter(label: "Today", fraction: now)]
-        if let baseline {
-            meters.append(MainMeter(label: "Baseline", fraction: baseline, isBaseline: true))
-        }
-        return meters
     }
 
     // MARK: - Nothing to show
