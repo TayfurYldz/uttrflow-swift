@@ -88,14 +88,24 @@ final class StubTransformer: TextTransformationEngine {
     /// The scripted availability, the scripted error, and how many times `transform` ran.
     private let state: Mutex<(availability: TransformerAvailability, error: TransformationError?, count: Int)>
 
+    /// How long this stub says it may take, for a test about an engine spending its own turn.
+    let budget: Duration
+
+    /// Whether it answers at all; a hanging engine is what the floor's own allowance exists for.
+    private let hangs: Bool
+
     /// Scripts the availability and an optional failure.
     init(
         kind: TransformerKind,
         availability: TransformerAvailability = .available,
-        error: TransformationError? = nil
+        error: TransformationError? = nil,
+        budget: Duration = StageTimeout.engine,
+        hangs: Bool = false
     ) {
         self.kind = kind
         self.state = Mutex((availability, error, 0))
+        self.budget = budget
+        self.hangs = hangs
     }
 
     /// The scripted availability.
@@ -111,6 +121,8 @@ final class StubTransformer: TextTransformationEngine {
             state.count += 1
             return state.error
         }
+        // Never answers, so the router's own limit is the only thing that can end this attempt.
+        if hangs { try? await Task.sleep(for: .seconds(3600)) }
         if let error { throw error }
         return TransformationResult(text: "by \(kind.rawValue)", producedBy: kind)
     }

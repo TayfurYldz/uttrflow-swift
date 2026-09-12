@@ -215,4 +215,37 @@ struct PromptContractTests {
     func versioned() {
         #expect(PromptBuilder.version >= 1)
     }
+
+    // MARK: - One engine's hang is not another's
+
+    /// The floor exists for exactly this case, and used to sit inside the budget the model had spent.
+    @Test("lets the floor answer when the model never does", .timeLimit(.minutes(1)))
+    func aHungModelDoesNotStarveTheFloor() async throws {
+        let clock = ManualClock()
+        let model = StubTransformer(kind: .foundationModels, hangs: true)
+        let floor = StubTransformer(kind: .rules)
+        let router = TransformerRouter(
+            engines: [model, floor], preference: [.foundationModels, .rules], clock: clock)
+
+        let running = Task { try await router.transform(request) }
+        await clock.advanceWhenSomethingIsWaiting(by: StageTimeout.engine)
+
+        let result = try await running.value
+        #expect(result.producedBy == .rules)
+        #expect(floor.transformCount == 1)
+    }
+
+    /// The floor's own allowance is short, since it only rearranges words already in hand.
+    @Test("gives the floor a shorter allowance than a model")
+    func theFloorDeclaresAShortBudget() {
+        #expect(RuleBasedTransformer().budget == StageTimeout.rules)
+        #expect(StageTimeout.rules < StageTimeout.engine)
+        // Both inside the stage's backstop, or the floor could never answer after a model's turn.
+        #expect(StageTimeout.engine + StageTimeout.rules <= StageTimeout.transformation)
+    }
+
+    @Test("an engine that says nothing about its allowance gets a model's")
+    func defaultBudgetIsAModels() {
+        #expect(StubTransformer(kind: .foundationModels).budget == StageTimeout.engine)
+    }
 }
