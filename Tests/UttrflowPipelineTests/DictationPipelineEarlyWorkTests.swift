@@ -538,4 +538,38 @@ struct DictationPipelineEarlyWorkTests {
             rendezvous.tidiesBesideARecognition == 2,
             "every tidy but the last runs beside the next recognition")
     }
+
+    /// The drain begins when the key comes up, so the user waits through it and Diagnostics must say so.
+    @Test("charges the wait for the in-flight piece to a stage of its own")
+    func measuresTheDrain() async {
+        let capture = FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces))
+        await capture.setCaptured(Take.threePieces)
+        let speech = NumberingSpeechEngine()
+        let metrics = RecordingMetricsRecorder()
+        let pipeline = makePipeline(capture: capture, speech: speech, metrics: metrics)
+
+        await pipeline.startRecording()
+        await waitForCalls(1, on: speech)
+        await pipeline.finishRecording()
+
+        #expect(await metrics.measurements.contains { $0.stage == .drain })
+    }
+
+    /// A dictation with no piece in flight waits for nothing, and a row of zero would only mislead.
+    @Test("charges nothing when there was no piece in flight")
+    func measuresNoDrainWithoutEarlyWork() async {
+        let capture = FakeAudioCaptureEngine(stopOutcome: .success(Take.onePiece))
+        await capture.setCaptured(Take.onePiece)
+        let metrics = RecordingMetricsRecorder()
+        // No early poll ever fires, so nothing is ever in flight to wait for.
+        let pipeline = DictationPipeline(
+            capture: capture, speech: NumberingSpeechEngine(), cleaner: ShoutingCleaner(),
+            context: FakeContextEngine(context: .fixture()), inserter: CollectingInserter(),
+            metrics: metrics, windowing: quick, earlyPoll: .seconds(60))
+
+        await pipeline.startRecording()
+        await pipeline.finishRecording()
+
+        #expect(await metrics.measurements.contains { $0.stage == .drain } == false)
+    }
 }
