@@ -85,3 +85,16 @@ and writes Hinglish accurately against the evaluation corpus (see `Docs/bakeoff.
 `AppleFoundationCleanupModel.verifiedBeyondApplesList` therefore includes `.hindi`, which
 saves a Hindi speaker a 3 GB download and 4 GB of memory. Nothing goes in that list without a
 corpus measurement; a bad rewrite still has the meaning guard and the router beneath it.
+
+**What the guard can and cannot read there.** Its tokeniser is ASCII-shaped, so a Devanagari
+draft is left to the base checks — emptiness, a preamble, the growth ratio, invented numbers —
+and the word-survival, place and churn checks compare nothing. That is deliberate and tested:
+romanising is the most invasive thing the model is asked to do, and a guard that refused what it
+could not read would disable the model for every Hindi user.
+
+One check does read any script. `negators(in:)` counts words from a list without asking whether
+they are plain, so the negations are held in both scripts — नहीं, ना, मत and the romanisations
+the prompt asks for (nahi, nahin, nahee, na, mat) — and a negation dropped or added between a
+Devanagari draft and a Hinglish rewrite is refused. The rest of the gap needs Unicode word
+segmentation, a transliteration relation beside the irregular-verb table, and a Hindi corpus to
+measure against, and it should not be closed by refusing what cannot be read.
