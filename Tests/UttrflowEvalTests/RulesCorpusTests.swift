@@ -28,7 +28,9 @@ struct RulesCorpusTests {
         "document-sentence-ending-in-a-percentage", "document-sentence-ending-in-a-close-quote",
         "document-bullet-caret-capitalises", "document-numbered-caret-capitalises",
         "spreadsheet-number-in-cell", "spreadsheet-percentage-in-cell", "sql-editor-prose-stays-prose",
-        "sql-editor-numerals", "code-editor-line-break-preserved", "code-editor-numeral-no-stop",
+        "sql-editor-numerals", "sql-editor-large-number-ungrouped",
+        "code-editor-large-number-ungrouped",
+        "code-editor-line-break-preserved", "code-editor-numeral-no-stop",
         "message-short-no-stop", "email-greeting-kept", "email-continues-mid-sentence",
         "email-two-paragraphs",
     ]
@@ -61,7 +63,7 @@ struct RulesCorpusTests {
         // Grammar cases name a destination too, but repairs are the model's alone; the floor is below.
         let named = Set(
             EvaluationCorpus.all.filter { $0.destination != .plain && $0.category != .grammar }.map(\.id))
-        #expect(named.count == 24)
+        #expect(named.count == 26)
         #expect(named.subtracting(Self.modelOnly).isSubset(of: Self.rulesMustPass))
         #expect(Self.modelOnly.isSubset(of: named))
         #expect(Self.modelOnly.isDisjoint(with: Self.rulesMustPass))

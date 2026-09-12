@@ -795,6 +795,35 @@ public enum EvaluationCorpus {
             mustEndWith: "rows."
         ),
         .init(
+            id: "sql-editor-large-number-ungrouped", category: .contextual,
+            spoken: "where total is greater than twelve thousand",
+            expected: "Where total is greater than 12000.",
+            mustKeep: ["12000"],
+            context: AppContext(
+                applicationName: "TablePlus",
+                bundleIdentifier: "com.tinyapp.TablePlus",
+                documentName: "audit.sql \u{2014} ops"
+            ),
+            mustNotAdd: ["12,000"],
+            destination: .sqlEditor,
+            mustEndWith: "12000."
+        ),
+        .init(
+            id: "code-editor-large-number-ungrouped", category: .contextual,
+            spoken: "let limit equals twelve thousand",
+            expected: "let limit equals 12000",
+            mustKeep: ["12000"],
+            context: AppContext(
+                applicationName: "Xcode",
+                bundleIdentifier: "com.apple.dt.Xcode",
+                documentName: "Limits.swift",
+                precedingText: "    "
+            ),
+            mustNotAdd: ["12,000"],
+            destination: .codeEditor,
+            mustEndWith: "12000"
+        ),
+        .init(
             id: "code-editor-line-break-preserved", category: .contextual,
             spoken: "retry the request new line log the failure",
             expected: "Retry the request\nlog the failure",
