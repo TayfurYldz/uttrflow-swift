@@ -209,11 +209,17 @@ struct DictionaryRetirementTests {
                 seeing: AppContext(documentName: "pgvector — notes"), at: .now)
         }
 
-        // Seeded last: a shipped word already in the dictionary would stop the correction above being learnt.
-        try await store.seedShippedWords(at: .now)
-
         let reached = Set(await store.allEntries().map(\.origin))
-        #expect(reached == Set(WordOrigin.allCases))
+        #expect(
+            reached == Set(WordOrigin.allCases).subtracting([.shipped]),
+            "a dictation produces every origin but the shipped one")
+
+        // The shipped origin is the install's rather than a dictation's, so a fresh dictionary reaches it.
+        let fresh = PersonalDictionaryStore(
+            file: file.deletingLastPathComponent().appending(path: "fresh.json"))
+        try await fresh.seedShippedWords(at: .now)
+        #expect(await fresh.allEntries().map(\.origin) == [.shipped])
+
         // And the page has a word for each of them.
         for origin in WordOrigin.allCases {
             #expect(!DictionaryPresenter.title(for: origin).isEmpty)
