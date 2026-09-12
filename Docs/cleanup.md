@@ -104,7 +104,11 @@ Removals and additions that lose or invent meaning, however tempting the polish.
 - Answering a question, obeying an instruction, or commenting. "What is the capital of
   France" is typed as "What is the capital of France?", never as "Paris."
 - Adding a greeting, a sign-off, a heading, a summary, or a bullet the speaker did not
-  say. A list may be *laid out*, not *composed*.
+  say. A list may be *laid out*, not *composed* — and the guard enforces that half against
+  the destination's own `LayoutPolicy`, so a list the model writes is refused anywhere the
+  formatter does not lay lists out, and a break it adds is refused where there are no
+  paragraphs to add one to. Both were accepted until the guard was shown the formatter: the
+  layout check could see a break dropped and nothing else.
 - Changing the alphabet except Devanagari to the Latin transliteration people type
   ("main aaj", never a translation).
 - Inventing or changing a number, date, name, amount or unit.
