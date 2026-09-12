@@ -52,4 +52,27 @@ struct ReadingRestraintTests {
         #expect(!ReadingRestraint.opensAlike("a", heard: "at"))
         #expect(!ReadingRestraint.isWorthOffering("", for: "cash"))
     }
+
+    /// The two forms must ask the same question, or a caller that prepares its words gets different answers.
+    @Test(
+        "answers a prepared pair exactly as it answers two strings",
+        arguments: [
+            ("Marcie", "marcy"), ("kubectl", "cube cuttle"), ("there", "their"),
+            ("pgvector", "pg vector"), ("hello", "hello"), ("cat", "dog"),
+        ]
+    )
+    func preparedAgreesWithStrings(reading: String, heard: String) {
+        #expect(
+            ReadingRestraint.isWorthOffering(ReadingKey(reading), for: ReadingKey(heard))
+                == ReadingRestraint.isWorthOffering(reading, for: heard))
+    }
+
+    @Test("works the spelling and the sound out once, at the key rather than at every comparison")
+    func keyCarriesWhatTheCheckAsks() {
+        let key = ReadingKey("Payment Sheet")
+
+        #expect(key.word == "Payment Sheet")
+        #expect(key.closed == ReadingRestraint.closedUp("Payment Sheet"))
+        #expect(key.code == DoubleMetaphone.code(for: "Payment Sheet"))
+    }
 }
