@@ -134,7 +134,9 @@ line. `Docs/bakeoff.md` explains why: a prompt line that is not
 measured is a guess, and two of the last three guesses made the output worse.
 
 **Seven cases fail on the shipping configuration, measured 2026-09-06 and left failing
-rather than papered over.** `sql-editor-identifier-from-screen`,
+rather than papered over.** The count and the list are that run's: the corpus has grown since,
+and two of the seven have had the defect in their own case fixed, so the next run is what says
+whether they still fail. `sql-editor-identifier-from-screen`,
 `editor-selected-identifier` and `slack-name-spelling` — spellings the screen shows and
 the model still will not take. Only the first of those three was measured with the spelling
 offered by name; the other two declared no doubtful run when that run was taken, so their
