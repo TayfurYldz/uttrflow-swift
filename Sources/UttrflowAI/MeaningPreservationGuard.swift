@@ -474,12 +474,9 @@ public struct MeaningPreservationGuard: Sendable {
 
     /// Sentences in the rewrite, counted by closing marks followed by space or end, never below one.
     static func sentenceCount(_ text: String) -> Int {
-        let characters = Array(text)
-        var count = 0
-        for (index, character) in characters.enumerated() where ".!?".contains(character) {
-            let next = index + 1 < characters.count ? characters[index + 1] : " "
-            if next.isWhitespace || next == "\"" { count += 1 }
-        }
+        // A word carrying a stop inside itself — "p.m.", "e.g." — ends no sentence, as FirstWordPass reads it.
+        let count = text.split(whereSeparator: \.isWhitespace)
+            .count { FirstWordPass.endsSentence(String($0)) }
         return max(1, count)
     }
 
