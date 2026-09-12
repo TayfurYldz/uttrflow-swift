@@ -60,11 +60,25 @@ been enough.
 | Stage | On timeout |
 |---|---|
 | capture, transcription | the dictation fails, and the pipeline returns to idle |
-| tidying, correction, expansion | the stage is skipped and the words go in untidied |
+| tidying | each engine has its own allowance inside the stage's, so a model that hangs costs its own turn and the deterministic floor still answers; only if that is starved too do the words go in untidied |
+| correction, expansion | the stage is skipped and the words go in as they were |
 | insertion | the dictation fails, carrying the transcript so it can still be offered |
 
 The point is not that a timeout produces a good outcome. It is that it produces *an*
 outcome, so the next dictation can start.
+
+Tidying is the one stage where "an outcome" was worse than it needed to be. One budget wrapped
+the whole route, and the route's parts differ by four orders of magnitude in cost: a model that
+hung for thirty seconds spent the deterministic floor's opportunity as well as its own, so the
+engine that exists for exactly that case never ran and the user was handed the raw transcript —
+no capitals, no stop, fillers still in — after a thirty-second wait. Each engine now declares its
+own allowance (`StageTimeout.engine` for a model, `StageTimeout.rules` for the floor) and the
+router spends them one at a time, with `StageTimeout.transformation` left as the backstop for the
+stage as a whole.
+
+A transcript that reaches the screen with no pass run over it is recorded as `.untidied` rather
+than as `.rules`. It used to claim the deterministic engine had written it, which made the one
+record worth finding indistinguishable from an ordinary one.
 
 ### 3. Nobody let go at all
 
