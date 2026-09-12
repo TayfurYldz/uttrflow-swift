@@ -95,6 +95,7 @@ struct DiagnosticsPageView: View {
     private func colour(for stage: DiagnosticsStageRow) -> Color {
         switch stage.stage {
         case .capture: .dockAccentTint
+        case .drain: .dockAccentTint
         case .transcription: .dockAccentLight
         case .correction: .dockAccent
         case .transformation: .dockActive
