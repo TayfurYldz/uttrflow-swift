@@ -432,6 +432,23 @@ struct GrammarGuardTests {
         #expect(verdict("मैं कल office नहीं आऊंगा", "Main kal office nahi aaunga.").isAccepted)
     }
 
+    /// The one check that reads any script: the count has to survive the romanisation the prompt asks for.
+    @Test("refuses a Hindi negation the rewrite dropped while romanising")
+    func refusesADroppedHindiNegation() {
+        #expect(verdict("मुझे यह build ठीक नहीं लग रहा", "Mujhe yah build theek lag raha hai.").isAccepted == false)
+    }
+
+    @Test("accepts the same sentence with its negation romanised")
+    func acceptsARomanisedHindiNegation() {
+        #expect(verdict("मुझे यह build ठीक नहीं लग रहा", "Mujhe yah build theek nahi lag raha.").isAccepted)
+    }
+
+    /// Added, not only dropped: a negation the model puts in turns the sentence around just as far.
+    @Test("refuses a Hindi negation the rewrite added")
+    func refusesAnAddedHindiNegation() {
+        #expect(verdict("मुझे यह build ठीक लग रहा", "Mujhe yah build theek nahi lag raha.").isAccepted == false)
+    }
+
     @Test("runs only when a draft is available, so the plain path is unchanged")
     func plainPathIsUnchanged() {
         #expect(
