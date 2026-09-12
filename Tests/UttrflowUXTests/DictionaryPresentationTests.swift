@@ -181,12 +181,13 @@ struct DictionaryRetirementTests {
                 .footnote?.contains("retires itself") == true)
     }
 
-    @Test("the footnote always says what the three origins mean")
+    @Test("the footnote always says what the four origins mean")
     func origins() {
         let footnote = HistoryFixture.dictionary(entries: [HistoryFixture.word()]).footnote
         #expect(footnote?.contains("Learned means") == true)
         #expect(footnote?.contains("Seen on screen means") == true)
         #expect(footnote?.contains("Added by you means") == true)
+        #expect(footnote?.contains("Shipped with Uttrflow means") == true)
     }
 
     /// Drives the real store like a dictation so every origin the page explains is one it can reach.
@@ -207,6 +208,9 @@ struct DictionaryRetirementTests {
                 heard: "try pgvector", wrote: "Try pgvector.",
                 seeing: AppContext(documentName: "pgvector — notes"), at: .now)
         }
+
+        // Seeded last: a shipped word already in the dictionary would stop the correction above being learnt.
+        try await store.seedShippedWords(at: .now)
 
         let reached = Set(await store.allEntries().map(\.origin))
         #expect(reached == Set(WordOrigin.allCases))
