@@ -13,7 +13,7 @@ public enum TextTransformers {
         var engines: [any TextTransformationEngine] = [
             GenerativeTextTransformer(
                 kind: .foundationModels, model: AppleFoundationCleanupModel(),
-                pipeline: .beforeModel(steps: steps), doubtful: doubtful),
+                steps: steps, doubtful: doubtful),
             RuleBasedTransformer(steps: steps),
         ]
         #if UTTRFLOW_CLOUD
@@ -21,7 +21,7 @@ public enum TextTransformers {
                 engines.append(
                     GenerativeTextTransformer(
                         kind: .cloud, model: HTTPCleanupModel(endpoint: endpoint),
-                        pipeline: .beforeModel(steps: steps), doubtful: doubtful)
+                        steps: steps, doubtful: doubtful)
                 )
             }
         #endif

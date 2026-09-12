@@ -9,23 +9,24 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
     private let model: any CleanupModel
     private let prompts: PromptBuilder
     private let meaningGuard: MeaningPreservationGuard
-    private let pipeline: CleaningPipeline
+    /// Which passes the user has left on; where they run is the request's to say, not this value's.
+    private let steps: CleaningSteps
     private let doubtful: DoubtfulWords
 
-    /// `pipeline` runs before the model and should leave casing and the full stop for afterwards.
+    /// The passes run before the model are built per request, so the destination's own policies reach them.
     public init(
         kind: TransformerKind,
         model: any CleanupModel,
         prompts: PromptBuilder = .standard,
         meaningGuard: MeaningPreservationGuard = MeaningPreservationGuard(),
-        pipeline: CleaningPipeline = .beforeModel,
+        steps: CleaningSteps = .default,
         doubtful: DoubtfulWords = .standard
     ) {
         self.kind = kind
         self.model = model
         self.prompts = prompts
         self.meaningGuard = meaningGuard
-        self.pipeline = pipeline
+        self.steps = steps
         self.doubtful = doubtful
     }
 
@@ -43,8 +44,11 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
     public func transform(
         _ request: TransformationRequest
     ) async throws(TransformationError) -> TransformationResult {
+        let formatter = DestinationFormatter.standard(for: request.situation.destination)
         // The passes go first, so fillers and self-corrections are gone before the model can rewrite them.
-        let draft = pipeline.run(Draft(transcription: request.transcription))
+        let draft = CleaningPipeline.beforeModel(
+            for: formatter, situation: request.situation, steps: steps
+        ).run(Draft(transcription: request.transcription))
         let spoken = draft.text
         // The sources answer in milliseconds and run beside each other, so the readings cost the call nothing.
         let readings = await doubtful.spans(in: draft, for: request.situation)
@@ -55,7 +59,6 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
 
         // Models echo the shape of the worked examples, so the answer is unwrapped before it is judged.
         let unwrapped = ResponseUnwrapper.unwrap(rewritten, spoken: spoken)
-        let formatter = DestinationFormatter.standard(for: request.situation.destination)
         let finishing = CleaningPipeline.afterModel(
             for: formatter, situation: request.situation, heard: request.transcription.text)
         let polished = finishing.run(Draft(keepingLineBreaks: TextTidy.collapseSpacing(unwrapped)))

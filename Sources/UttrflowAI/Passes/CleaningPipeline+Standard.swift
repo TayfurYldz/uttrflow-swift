@@ -5,11 +5,10 @@ extension CleaningPipeline {
     public static let standard = standard(for: .standard(for: .plain), situation: .unknown)
 
     /// The passes a language model is handed the result of; casing and the full stop are finished after it.
-    public static let beforeModel = beforeModel(steps: .default)
-
-    /// The same, with the steps the user switched off left out.
-    public static func beforeModel(steps: CleaningSteps) -> CleaningPipeline {
-        standard(for: .standard(for: .plain), situation: .unknown, steps: steps)
+    public static func beforeModel(
+        for formatter: DestinationFormatter, situation: Situation, steps: CleaningSteps = .default
+    ) -> CleaningPipeline {
+        standard(for: formatter, situation: situation, steps: steps)
             .without([FirstWordPass.id, TerminalStopPass.id])
     }
 
