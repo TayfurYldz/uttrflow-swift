@@ -15,17 +15,19 @@ public struct AppleFoundationCleanupModel: CleanupModel {
     /// Zero temperature keeps the model tidying rather than composing.
     private static let options = GenerationOptions(temperature: 0.0)
 
-    /// One session made ahead of its request, shared by every copy of this value.
-    private static let warmed = WarmedSession()
+    /// One session made ahead of its request and remade after each one, shared by every copy of this value.
+    private static let warmed = WarmSupply<LanguageModelSession> { instructions in
+        let session = LanguageModelSession(instructions: instructions)
+        session.prewarm()
+        return session
+    }
 
     /// Makes a model; every copy shares the warmed session.
     public init() {}
 
     /// Makes the next utterance's session now so its instructions load. See Docs/early-transcription.md.
     public func warm(instructions: String) async {
-        let session = LanguageModelSession(instructions: instructions)
-        session.prewarm()
-        await Self.warmed.keep(session, for: instructions)
+        await Self.warmed.replenish(for: instructions)
     }
 
     /// Available unless Apple's model is off or the language is neither declared by Apple nor verified here.
@@ -61,32 +63,12 @@ public struct AppleFoundationCleanupModel: CleanupModel {
             let response = try await session.respond(
                 to: text, generating: CleanedDictation.self, options: Self.options
             )
+            // After the answer and never beside it: this model serialises. See Docs/early-transcription.md.
+            await Self.warmed.replenish(for: instructions)
             return response.content.text
         } catch {
+            await Self.warmed.replenish(for: instructions)
             throw .transformFailed(kind: kind, description: error.localizedDescription)
         }
-    }
-}
-
-/// Holds one session that was made before its request, and hands it out exactly once.
-private actor WarmedSession {
-    /// The session made ahead of time, if any.
-    private var session: LanguageModelSession?
-    /// The instructions that session carries.
-    private var instructions: String?
-
-    /// Keeps `session` for the next request carrying `instructions`, dropping any earlier one.
-    func keep(_ session: LanguageModelSession, for instructions: String) {
-        self.session = session
-        self.instructions = instructions
-    }
-
-    /// The kept session if its instructions match, handed out once and then dropped either way.
-    func take(for instructions: String) -> LanguageModelSession? {
-        defer {
-            session = nil
-            self.instructions = nil
-        }
-        return self.instructions == instructions ? session : nil
     }
 }
