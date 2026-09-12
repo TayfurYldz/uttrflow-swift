@@ -56,8 +56,7 @@ enum PieceJoiner {
         guard case .offForShortMessages(let sentences) = formatter.terminalStop,
             let last = joined.last, !last.isNewline
         else { return joined }
-        // Counted per piece and summed: each piece has already had its own stop taken back, so the joined
-        // text reads as fewer sentences than were spoken.
+        // Summed per piece, since each piece has already had its own stop taken back and the joined text undercounts.
         let spoken = pieces.reduce(0) { $0 + SentenceCount.of($1) }
         return spoken > sentences ? WordShape.finished(joined) : WordShape.withoutTrailingStop(joined)
     }
