@@ -5,9 +5,10 @@ rail figures; Insights reuses the same arithmetic. The rule for every figure: no
 shown that was not measured. There is no "time saved" tile because Uttrflow has never
 watched the user type.
 
-## Accuracy
+## Left as dictated
 
-Both halves of the fraction count *spoken* words and both are read out of the same value:
+The figure this page used to call accuracy. Both halves of the fraction count *spoken* words and
+both are read out of the same value:
 
 ```
 accuracy = (spokenWords - correctedWords) / spokenWords
@@ -28,6 +29,17 @@ A dictation whose `spokenWords` is `nil` is left out on the same grounds. The fi
 
 The caption says "as you said them", not "as you wrote them": the denominator is the
 utterance, so a dictation the dictionary improved is not penalised for coming out shorter.
+
+**It is not accuracy, and it no longer says it is.** The fraction measures how little the clean-up
+altered the transcript, and a recogniser that mishears a word the clean-up then leaves alone scores
+it 100% — which is exactly what happened to the product's own name before the dictionary shipped
+knowing it. `Docs/measuring-accuracy.md` and `UttrflowEval` are where accuracy is defined, against a
+read corpus, and the two must not share a word.
+
+There is no baseline beside it either. The figure is near enough 100% for everybody every day, so
+yesterday's copy of it was a second bar of the same length: a comparison that cannot differ tells
+the reader nothing. If a figure worth comparing appears here — corrections the user made by hand,
+or dictations they undid, both of which are already recorded — the comparison comes back with it.
 
 ## Pace
 
