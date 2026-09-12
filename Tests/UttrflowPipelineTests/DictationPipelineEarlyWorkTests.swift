@@ -204,6 +204,9 @@ private enum Take {
         [Float](repeating: 0, count: Int(seconds * Double(rate)))
     }
 
+    /// One phrase with no pause in it, so nothing is ever worked ahead.
+    static let onePiece = AudioSamples.canonical(tone(1.2))
+
     /// Three phrases with a clear pause after the first two.
     static let threePieces = AudioSamples.canonical(
         tone(1.2) + silence(0.5) + tone(1.2) + silence(0.5) + tone(0.4))
