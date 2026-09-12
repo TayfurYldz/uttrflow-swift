@@ -34,7 +34,9 @@ content words are walked along the rewrite, each taking the earliest place still
 and a word whose only place lies behind one already taken has been moved rather than
 tidied. Several spoken words may share one place, because one identifier can spell them
 all ("fetch invoices" written as `fetchInvoices`). The
-function words a sentence gains and loses are capped at three. Negation is counted
+function words a sentence gains and loses are capped at three, counted over sentences the way
+`FirstWordPass` counts them — a word carrying a stop inside itself ends none, so "call me at 5
+p.m. tomorrow" is one sentence and gets one sentence's allowance rather than two. Negation is counted
 separately and may never shrink: "not" and the "n't" forms are function words, so
 nothing else would have stopped "I do not think we should ship" becoming "I think we
 should ship" — a churn of two, well inside the cap. "Never", "no" and "nothing" are
