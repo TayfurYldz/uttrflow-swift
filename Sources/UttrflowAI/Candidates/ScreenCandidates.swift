@@ -14,18 +14,25 @@ public struct ScreenCandidates: CandidateSource {
 
     /// The screen words that spell the run with its spaces closed up, then those that sound and open like it.
     public func candidates(for word: Draft.Word, in situation: Situation) async -> [String] {
-        let heard = word.text
-        let closed = DoubtfulSpan.closedUp(heard)
-        var spelled: [String] = []
-        var sounded: [String] = []
-        for shown in Self.words(on: situation) {
-            if DoubtfulSpan.closedUp(shown) == closed {
-                spelled.append(shown)
-            } else if ReadingRestraint.isWorthOffering(shown, for: heard) {
-                sounded.append(shown)
+        await candidates(for: [word], in: situation).first ?? []
+    }
+
+    /// Every run against one reading of the screen, so a page of selected text is read and coded once a piece.
+    public func candidates(for words: [Draft.Word], in situation: Situation) async -> [[String]] {
+        let shown = Self.words(on: situation).map(ReadingKey.init)
+        return words.map { word in
+            let heard = ReadingKey(word.text)
+            var spelled: [String] = []
+            var sounded: [String] = []
+            for screen in shown {
+                if screen.closed == heard.closed {
+                    spelled.append(screen.word)
+                } else if ReadingRestraint.isWorthOffering(screen, for: heard) {
+                    sounded.append(screen.word)
+                }
             }
+            return Array((spelled + sounded).prefix(Self.maximumOffered))
         }
-        return Array((spelled + sounded).prefix(Self.maximumOffered))
     }
 
     /// The window title, the selection and the text either side of the caret, split into words that carry a spelling.

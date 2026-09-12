@@ -5,6 +5,18 @@ public import UttrflowDictionary
 public protocol CandidateSource: Sendable {
     /// The readings this source offers for one run of doubtful words, best first, in single-digit milliseconds.
     func candidates(for word: Draft.Word, in situation: Situation) async -> [String]
+
+    /// The readings for every run of one piece, so what a source derives from the screen is derived once.
+    func candidates(for words: [Draft.Word], in situation: Situation) async -> [[String]]
+}
+
+extension CandidateSource {
+    /// One run at a time, which is right for a source whose index does not depend on the situation.
+    public func candidates(for words: [Draft.Word], in situation: Situation) async -> [[String]] {
+        var found: [[String]] = []
+        for word in words { found.append(await candidates(for: word, in: situation)) }
+        return found
+    }
 }
 
 /// A run of words the recogniser half-heard, and the readings the sources offered for it.
@@ -79,11 +91,7 @@ public struct DoubtfulWords: Sendable {
         var answers: [[[String]]] = Array(repeating: [], count: sources.count)
         await withTaskGroup(of: (Int, [[String]]).self) { group in
             for (position, source) in sources.enumerated() {
-                group.addTask {
-                    var found: [[String]] = []
-                    for word in words { found.append(await source.candidates(for: word, in: situation)) }
-                    return (position, found)
-                }
+                group.addTask { (position, await source.candidates(for: words, in: situation)) }
             }
             for await (position, found) in group { answers[position] = found }
         }

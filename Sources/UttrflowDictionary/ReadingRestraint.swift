@@ -27,8 +27,30 @@ public enum ReadingRestraint {
 
     /// Whether a reading is worth offering: another spelling, sounding alike, opening alike, and not one ordinary word for another.
     public static func isWorthOffering(_ reading: String, for heard: String) -> Bool {
-        closedUp(reading) != closedUp(heard) && opensAlike(reading, heard: heard)
-            && !bothOrdinary(reading, heard: heard)
-            && DoubleMetaphone.code(for: reading).sounds(like: DoubleMetaphone.code(for: heard))
+        isWorthOffering(ReadingKey(reading), for: ReadingKey(heard))
+    }
+
+    /// The same question of two words whose spelling and sound are already worked out, for a caller asking many.
+    public static func isWorthOffering(_ reading: ReadingKey, for heard: ReadingKey) -> Bool {
+        guard reading.closed != heard.closed, opensAlike(reading.closed, heard: heard.closed) else {
+            return false
+        }
+        return !(GeneralVocabulary.knows(reading.closed) && GeneralVocabulary.knows(heard.closed))
+            && reading.code.sounds(like: heard.code)
+    }
+}
+
+/// A word with the two things the reading check asks of it already worked out, so many asks cost one each.
+public struct ReadingKey: Sendable, Equatable {
+    public let word: String
+    /// The spelling with case and marks closed up, which both halves of the check compare on.
+    public let closed: String
+    /// How it sounds, taken once rather than once per comparison.
+    public let code: PhoneticCode
+
+    public init(_ word: String) {
+        self.word = word
+        self.closed = ReadingRestraint.closedUp(word)
+        self.code = DoubleMetaphone.code(for: word)
     }
 }
