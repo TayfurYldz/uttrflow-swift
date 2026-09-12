@@ -300,6 +300,16 @@ alone. Some cleanings only make sense over the whole:
 | Destination + formatter lookup | µs | — |
 | Deterministic passes | <1 ms per piece | — |
 | Candidate sources | <5 ms per piece, the three in parallel | — |
+
+A source is asked for a whole piece's runs at once, not run by run, which is what keeps that
+budget a per-piece cost rather than a per-run one. `ScreenCandidates` is why the distinction
+matters: everything it derives — the join of title, selection and caret text, the split, the
+512-word cut, the dedupe, and a double metaphone of every word that survives — depends on the
+screen and not on the run being asked about, and it used to be redone for each one. Three
+consecutive doubted words are nine runs, so the screen was read nine times and coded nine
+times, and a noisy recognition multiplied that further: the dictation coming out worst cost
+the most. The default implementation still asks one run at a time, which is right for a source
+whose index is built from the dictionary rather than from the screen.
 | Model call | 0.7–1 s per piece; the one slow step | recognition of the next piece (different hardware) |
 | Guard | <1 ms | — |
 | Join-level layout | <1 ms | — |
