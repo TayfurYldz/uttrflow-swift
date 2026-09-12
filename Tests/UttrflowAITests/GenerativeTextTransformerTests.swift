@@ -97,6 +97,34 @@ struct GenerativeTextTransformerTests {
         )
     }
 
+    /// The passes under the destination's own policies, which is what the model is handed.
+    @Test("runs the pre-model passes under the destination the words are going to")
+    func runsThePassesForTheDestination() async throws {
+        let model = FakeCleanupModel { _ in "1 of them" }
+        let sut = GenerativeTextTransformer(kind: .foundationModels, model: model)
+
+        let app = AppContext(applicationName: "TablePlus", bundleIdentifier: "com.tinyapp.TablePlus")
+        _ = try await sut.transform(
+            TransformationRequest(
+                transcription: .fixture(text: "one of them", language: .english), context: app,
+                situation: Situation(
+                    app: app, insertion: app.insertionPoint, destination: .sqlEditor)))
+
+        // A SQL editor takes .always, so the numeral is the passes' answer rather than the model's.
+        #expect(model.calls.first?.text.contains("1 of them") == true)
+    }
+
+    /// Plain text keeps zero to nine as words, and that must not change with this.
+    @Test("leaves a small number as words where the destination says so")
+    func leavesSmallNumbersAloneInProse() async throws {
+        let model = FakeCleanupModel { _ in "One of them." }
+        let sut = GenerativeTextTransformer(kind: .foundationModels, model: model)
+
+        _ = try await sut.transform(request("one of them"))
+
+        #expect(model.calls.first?.text.contains("one of them") == true)
+    }
+
     @Test("does not count a pass's removals against the model")
     func judgesAgainstTheDraft() async throws {
         let model = FakeCleanupModel { _ in "Yes, please." }
