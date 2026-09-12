@@ -11,6 +11,7 @@ private func runsWithoutNetwork(_ kind: TransformerKind) -> Bool {
     case .localModel: true  // Open weights, already on disk.
     case .rules: true  // String arithmetic; it cannot reach anything.
     case .cloud: false  // The one engine that is a network call.
+    case .untidied: true  // Not an engine: what the record says when none of them ran.
     }
 }
 
