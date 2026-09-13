@@ -26,6 +26,41 @@ struct WhisperKitContractTests {
         #expect(options.windowClipTime == VocabularyPrompt.windowClipTime)
     }
 
+    /// Every option the product names, read back off the options it built, so an upstream default cannot move one.
+    @Test("the decode the product asks for is the decode it wrote down")
+    func decodeIsWhatWasAskedFor() {
+        let options = VocabularyPrompt.decodingOptions(languageHint: .english)
+
+        #expect(options.task == .transcribe)
+        #expect(options.temperature == 0)
+        #expect(options.temperatureIncrementOnFallback == 0.2)
+        #expect(options.temperatureFallbackCount == 5)
+        #expect(options.sampleLength == Constants.maxTokenContext)
+        #expect(options.topK == 5)
+        #expect(options.usePrefillPrompt)
+        #expect(options.skipSpecialTokens)
+        #expect(!options.withoutTimestamps)
+        #expect(options.wordTimestamps)
+        #expect(options.maxInitialTimestamp == nil)
+        #expect(options.clipTimestamps.isEmpty)
+        #expect(options.windowClipTime == VocabularyPrompt.windowClipTime)
+        #expect(!options.suppressBlank)
+        #expect(options.suppressTokens.isEmpty)
+        #expect(options.chunkingStrategy == nil)
+    }
+
+    /// Whisper's own tests for a window of repetition, low confidence or silence, which the product does not retune.
+    @Test("the thresholds a window is accepted or retried on are the ones written down here")
+    func thresholdsAreWhatWasAskedFor() {
+        let options = VocabularyPrompt.decodingOptions(languageHint: nil)
+
+        #expect(options.compressionRatioThreshold == 2.4)
+        #expect(options.logProbThreshold == -1.0)
+        #expect(options.firstTokenLogProbThreshold == -1.5)
+        #expect(options.noSpeechThreshold == 0.6)
+        #expect(options.concurrentWorkerCount == 16)
+    }
+
     /// The prefill the timestamp rules are told to start sampling after, counted from these.
     @Test("a multilingual decode still prefills the four tokens DecoderPrefill counts without a prompt")
     func prefillLengthIsStillFour() {

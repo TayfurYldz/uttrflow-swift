@@ -53,7 +53,11 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.8.0"),
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "1.1.0"),
+        // Pinned exactly, not `from:`. The recogniser is a behavioural input to every
+        // dictation, and there is no accuracy baseline to answer whether a bump made the
+        // words better or worse — see Docs/measuring-accuracy.md. Until there is one, the
+        // version moves when somebody decides to move it.
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", exact: "1.1.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.31.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.4"),
         .package(url: "https://github.com/huggingface/swift-huggingface", from: "0.1.0"),
