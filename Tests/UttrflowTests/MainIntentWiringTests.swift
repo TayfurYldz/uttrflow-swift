@@ -23,19 +23,6 @@ struct Sandbox: ~Copyable {
     deinit { try? FileManager.default.removeItem(at: root) }
 }
 
-/// Polls until the change a button set going reaches disk; a fixed sleep is slow or flaky.
-@MainActor
-private func eventually(
-    _ condition: () async -> Bool, within limit: Duration = .seconds(2)
-) async -> Bool {
-    let deadline = ContinuousClock.now + limit
-    while ContinuousClock.now < deadline {
-        if await condition() { return true }
-        try? await Task.sleep(for: .milliseconds(5))
-    }
-    return await condition()
-}
-
 @MainActor
 @Suite("What the buttons on the main window actually do")
 struct MainIntentWiringTests {
@@ -51,8 +38,8 @@ struct MainIntentWiringTests {
 
         app.carryOut(.saveWord(word: "Uttrflow", pronunciation: "utter-flow"))
 
-        let saved = await eventually { await store.allEntries().count == 1 }
-        #expect(saved)
+        await app.intentWork?.value
+        #expect(await store.allEntries().count == 1)
         let kept = try #require(await store.allEntries().first)
         #expect(kept.word == "Uttrflow")
         #expect(kept.pronunciation == "utter-flow")
@@ -70,8 +57,8 @@ struct MainIntentWiringTests {
 
         app.carryOut(.forgetWord(entry.id))
 
-        let gone = await eventually { await store.allEntries().isEmpty }
-        #expect(gone)
+        await app.intentWork?.value
+        #expect(await store.allEntries().isEmpty)
     }
 
     @Test("restoring a retired word lets it be applied again")
@@ -87,8 +74,8 @@ struct MainIntentWiringTests {
 
         app.carryOut(.restoreWord(entry.id))
 
-        let trusted = await eventually { await store.allEntries().first?.isTrustworthy == true }
-        #expect(trusted)
+        await app.intentWork?.value
+        #expect(await store.allEntries().first?.isTrustworthy == true)
     }
 
     /// The presenter refuses a blank word first; one reaching the store must cost the save, not the file.
@@ -101,8 +88,9 @@ struct MainIntentWiringTests {
 
         app.carryOut(.saveWord(word: "   ", pronunciation: "utter-flow"))
 
-        let wrote = await eventually({ !(await store.allEntries().isEmpty) }, within: .milliseconds(200))
-        #expect(!wrote)
+        // The save has run to its end, so an empty store is a refusal rather than a write still on its way.
+        await app.intentWork?.value
+        #expect(await store.allEntries().isEmpty)
     }
 
     // MARK: Snippets
@@ -115,8 +103,8 @@ struct MainIntentWiringTests {
 
         app.carryOut(.saveSnippet(trigger: "my address", text: "Flat 402", replacing: nil))
 
-        let saved = await eventually { await store.snippets().count == 1 }
-        #expect(saved)
+        await app.intentWork?.value
+        #expect(await store.snippets().count == 1)
         #expect(await store.snippets().first?.trigger == "my address")
     }
 
@@ -133,7 +121,8 @@ struct MainIntentWiringTests {
         app.carryOut(
             .saveSnippet(trigger: "my address", text: "Flat 402", replacing: original.id))
 
-        let edited = await eventually { await store.snippets().first?.trigger == "my address" }
+        await app.intentWork?.value
+        let edited = await store.snippets().first?.trigger == "my address"
         #expect(edited)
         let kept = try #require(await store.snippets().first)
         #expect(kept.id == original.id)
@@ -178,10 +167,9 @@ struct MainIntentWiringTests {
 
         app.carryOut(.saveWord(word: "pgvector", pronunciation: ""))
 
-        // Still the learnt entry; replacing would reset the origin and count.
-        let settled = await eventually(
-            { await store.allEntries().first?.origin != .observed }, within: .milliseconds(300))
-        #expect(!settled)
+        // Still the learnt entry once the save has finished; replacing would reset the origin and count.
+        await app.intentWork?.value
+        #expect(await store.allEntries().first?.origin == .observed)
         #expect(await store.allEntries().count == 1)
         #expect(await store.allEntries().first?.timesUsed == 6)
     }
@@ -199,10 +187,9 @@ struct MainIntentWiringTests {
         app.carryOut(.editSnippet(snippet.id))
         app.carryOut(.addSnippet)
 
-        // Long enough for the disk read behind Edit to have finished.
-        let filled = await eventually(
-            { app.mainWindow?.snippetDraft.editing != nil }, within: .milliseconds(400))
-        #expect(!filled)
+        // The disk read behind Edit has finished, so it had its chance to win late.
+        await app.openingEditor?.value
+        #expect(app.mainWindow?.snippetDraft.editing == nil)
         #expect(app.mainWindow?.snippetDraft == SnippetDraft())
     }
 
@@ -221,10 +208,9 @@ struct MainIntentWiringTests {
         app.carryOut(.saveWord(word: "Uttrflow", pronunciation: "utter-flow"))
         let store = PersonalDictionaryStore(
             file: PersonalDictionaryStore.defaultFile(in: sandbox.root))
-        let saved = await eventually { await store.allEntries().count == 1 }
-        #expect(saved)
-        let closed = await eventually { app.mainWindow?.wordDraft == DictionaryDraft() }
-        #expect(closed)
+        await app.intentWork?.value
+        #expect(await store.allEntries().count == 1)
+        #expect(app.mainWindow?.wordDraft == DictionaryDraft())
     }
 
     /// A refusal leaves the editor open holding what was typed.
@@ -240,9 +226,8 @@ struct MainIntentWiringTests {
         app.mainWindow?.editWord(DictionaryDraft(word: "   "))
         app.carryOut(.saveWord(word: "   ", pronunciation: ""))
 
-        let wrote = await eventually(
-            { !(await store.allEntries().isEmpty) }, within: .milliseconds(300))
-        #expect(!wrote)
+        await app.intentWork?.value
+        #expect(await store.allEntries().isEmpty)
         #expect(app.mainWindow?.wordDraft.word == "   ")
     }
 
@@ -256,8 +241,8 @@ struct MainIntentWiringTests {
 
         app.carryOut(.forgetSnippet(snippet.id))
 
-        let gone = await eventually { await store.snippets().isEmpty }
-        #expect(gone)
+        await app.intentWork?.value
+        #expect(await store.snippets().isEmpty)
     }
 
     // MARK: The history
@@ -274,8 +259,8 @@ struct MainIntentWiringTests {
 
         app.carryOut(.forgetDictation(record.id))
 
-        let gone = await eventually { await store.records(keeping: retention).isEmpty }
-        #expect(gone)
+        await app.intentWork?.value
+        #expect(await store.records(keeping: retention).isEmpty)
     }
 
     @Test("flagging a dictation is kept, and flagging it again puts it back")
@@ -289,16 +274,12 @@ struct MainIntentWiringTests {
         try await store.append(record, keeping: retention)
 
         app.carryOut(.flagDictation(record.id))
-        let flagged = await eventually {
-            await store.records(keeping: retention).first?.isFlagged == true
-        }
-        #expect(flagged)
+        await app.intentWork?.value
+        #expect(await store.records(keeping: retention).first?.isFlagged == true)
 
         app.carryOut(.flagDictation(record.id))
-        let unflagged = await eventually {
-            await store.records(keeping: retention).first?.isFlagged == false
-        }
-        #expect(unflagged)
+        await app.intentWork?.value
+        #expect(await store.records(keeping: retention).first?.isFlagged == false)
     }
 
     /// Undo reaches both stores, or the word is applied again tomorrow.
@@ -325,15 +306,13 @@ struct MainIntentWiringTests {
 
         app.carryOut(.undoCorrection(correction.id))
 
-        let blamed = await eventually { await dictionary.allEntries().first?.timesReverted == 1 }
-        #expect(blamed)
+        await app.intentWork?.value
+        #expect(await dictionary.allEntries().first?.timesReverted == 1)
 
         // Undoing again counts nothing, because the history already put the words back.
         app.carryOut(.undoCorrection(correction.id))
-        let settled = await eventually(
-            { await dictionary.allEntries().first?.timesReverted != 1 },
-            within: .milliseconds(300))
-        #expect(!settled)
+        await app.intentWork?.value
+        #expect(await dictionary.allEntries().first?.timesReverted == 1)
         let kept = try #require(await history.records(keeping: retention).first)
         #expect(kept.changes?.corrections.first?.isUndone == true)
         #expect(kept.text == "print s q l")

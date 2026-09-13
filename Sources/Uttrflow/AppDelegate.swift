@@ -159,6 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var noticeTask: Task<Void, Never>?
     /// The editor opening against the disk, kept so a caller can wait for it rather than poll for it.
     private(set) var openingEditor: Task<Void, Never>?
+    /// The store work the last main-window intent set going, so a test awaits it rather than a clock.
+    private(set) var intentWork: Task<Void, Never>?
     /// A3, A7 — where the user was when the panel closed, while reopening still counts as undoing.
     private var resume: PanelResume?
     /// Long enough to reach for the keyboard, short enough to not undo a forgotten delete.
@@ -1534,7 +1536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .undoCorrection(let id):
             // In order: the history decides there was something to undo before the dictionary hears of it.
             let retention = Retention(days: settings.transcriptRetentionDays, now: Date())
-            Task { [weak self] in
+            intentWork = Task { [weak self] in
                 guard let self,
                     let entryID = try? await history.undoCorrection(id, keeping: retention)
                 else { return }
@@ -1566,7 +1568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Runs a store change and redraws from what the store then holds, never from what it returned.
     private func act(_ change: @escaping () async throws -> Void) {
-        Task { [weak self] in
+        intentWork = Task { [weak self] in
             do {
                 try await change()
             } catch {
@@ -1586,7 +1588,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func saveWord(_ word: String, pronunciation: String) {
-        Task { [weak self] in
+        intentWork = Task { [weak self] in
             guard let self else { return }
             do throws(DictionaryStoreError) {
                 try await dictionary.add(word: word, pronunciation: pronunciation, at: Date())
@@ -1610,7 +1612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Saves a snippet, closing the editor only once it is in, as saving a word does.
     private func saveSnippet(trigger: String, text: String, replacing: UUID?) {
-        Task { [weak self] in
+        intentWork = Task { [weak self] in
             guard let self else { return }
             do throws(SnippetStoreError) {
                 try await snippets.save(
