@@ -118,15 +118,18 @@ public struct ExpandedTranscript: Sendable, Equatable {
 public struct AppliedChanges: Sendable, Equatable {
     public let corrections: [DictationCorrection]
     public let snippets: [SnippetUse]
+    /// Dictionary entries whose spelling the tidier wrote for a doubtful run: counted used like a correction's, not yet undoable.
+    public let entriesTaken: [UUID]
     /// Words the recogniser heard before any rewrite; the space ``DictationCorrection/wordRange`` indexes.
     public let spokenWords: Int?
 
     public init(
         corrections: [DictationCorrection] = [], snippets: [SnippetUse] = [],
-        spokenWords: Int? = nil
+        entriesTaken: [UUID] = [], spokenWords: Int? = nil
     ) {
         self.corrections = corrections
         self.snippets = snippets
+        self.entriesTaken = entriesTaken
         self.spokenWords = spokenWords
     }
 
@@ -134,5 +137,5 @@ public struct AppliedChanges: Sendable, Equatable {
     public static let none = AppliedChanges()
 
     /// Whether there is anything to show, undo or learn from; read to skip the learner entirely.
-    public var isEmpty: Bool { corrections.isEmpty && snippets.isEmpty }
+    public var isEmpty: Bool { corrections.isEmpty && snippets.isEmpty && entriesTaken.isEmpty }
 }

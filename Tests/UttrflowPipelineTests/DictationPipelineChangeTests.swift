@@ -123,9 +123,11 @@ private final class FakeVocabulary: VocabularyLearning, Sendable {
 private final class FakeCleaner: TranscriptCleaning, Sendable {
     private let state = Mutex<[TransformationRequest]>([])
     private let tidy: @Sendable (String) -> String
+    private let taking: [UUID]
 
-    init(tidying tidy: @escaping @Sendable (String) -> String = { $0 }) {
+    init(tidying tidy: @escaping @Sendable (String) -> String = { $0 }, taking: [UUID] = []) {
         self.tidy = tidy
+        self.taking = taking
     }
 
     func clean(
@@ -133,7 +135,7 @@ private final class FakeCleaner: TranscriptCleaning, Sendable {
     ) async throws(TransformationError) -> TransformationResult {
         state.withLock { $0.append(request) }
         return TransformationResult(
-            text: tidy(request.transcription.text), producedBy: .foundationModels)
+            text: tidy(request.transcription.text), producedBy: .foundationModels, entriesTaken: taking)
     }
 
     var requests: [TransformationRequest] { state.withLock { $0 } }
@@ -362,6 +364,31 @@ struct DictationPipelineLearningTests {
         await dictate(with: pipeline)
 
         #expect(learner.entries == [[entry]])
+    }
+
+    /// Issue 219: a spelling that reached the user through the doubtful-word line was never counted, so it could never retire.
+    @Test("Counts the entry behind a reading the tidier took, as it counts a correction's")
+    func countsAReadingTaken() async {
+        let learner = FakeLearner()
+        let pipeline = makePipeline(cleaner: FakeCleaner(taking: [entry]), learner: learner)
+
+        await dictate(with: pipeline)
+
+        #expect(learner.entries == [[entry]])
+        #expect(await pipeline.outcome?.changes.entriesTaken == [entry])
+    }
+
+    /// Either path applying an entry is one dictation it was applied to, so the store hears of it once.
+    @Test("Counts an entry once when a correction and a taken reading both used it")
+    func countsAnEntryOnceAcrossBothPaths() async {
+        let learner = FakeLearner()
+        let pipeline = makePipeline(
+            cleaner: FakeCleaner(taking: [entry, otherEntry]),
+            corrector: FakeCorrector(proposing: [paymentSheet]), learner: learner)
+
+        await dictate(with: pipeline)
+
+        #expect(learner.entries == [[entry, otherEntry]])
     }
 
     /// The dictionary counts dictations an entry applied to, not words.

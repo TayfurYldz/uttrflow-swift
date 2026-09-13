@@ -13,14 +13,14 @@ private func joined(_ pieces: [String], _ destination: Destination) -> String {
 private func piece(
     _ text: String, heard: String? = nil, by producedBy: TransformerKind = .rules,
     corrections: [DictationCorrection] = [], language: DetectedLanguage? = nil,
-    segments: [TranscriptionSegment] = [], duration: Duration = .zero
+    segments: [TranscriptionSegment] = [], duration: Duration = .zero, entriesTaken: [UUID] = []
 ) -> Piece {
     let spoken = heard ?? text
     return Piece(
         heard: Transcription(
             text: spoken, detectedLanguage: language, segments: segments, audioDuration: duration),
         corrected: CorrectedTranscript(text: spoken, corrections: corrections),
-        cleaned: TransformationResult(text: text, producedBy: producedBy))
+        cleaned: TransformationResult(text: text, producedBy: producedBy, entriesTaken: entriesTaken))
 }
 
 @Suite("PieceJoiner lists")
@@ -264,6 +264,21 @@ struct PieceJoinerWholeTests {
         #expect(
             PieceJoiner.join([model, piece("Ship it.")], under: .standard(for: .document)).cleaned
                 .producedBy == .rules)
+    }
+
+    /// A reading the tidier took in any piece is a use of its entry, so joining must not drop the pieces after the first.
+    @Test("carries the entry behind every reading each piece's tidier took")
+    func entriesTakenSurviveTheJoin() {
+        let first = UUID()
+        let second = UUID()
+        let whole = PieceJoiner.join(
+            [
+                piece("The crash is in PaymentSheet.", entriesTaken: [first]),
+                piece("Nothing taken here."),
+                piece("Ask Kestrel.", entriesTaken: [second]),
+            ], under: .standard(for: .document))
+
+        #expect(whole.cleaned.entriesTaken == [first, second])
     }
 
     @Test("moves each correction's words past the pieces before it")

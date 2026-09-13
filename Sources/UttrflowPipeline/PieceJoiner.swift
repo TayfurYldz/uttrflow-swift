@@ -45,7 +45,7 @@ enum PieceJoiner {
                 text: finishedWhole(
                     laidOut(pieces.map(\.cleaned.text), under: formatter),
                     spokenAs: pieces.map(\.cleaned.text), under: formatter),
-                producedBy: producedBy))
+                producedBy: producedBy, entriesTaken: pieces.flatMap(\.cleaned.entriesTaken)))
     }
 
     /// The final stop, asked of the whole message rather than of its last piece. See `Docs/cleanup-design.md` §7.
