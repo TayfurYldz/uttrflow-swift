@@ -48,9 +48,8 @@ extension MacContextEngine {
         let field = SurfaceProbe.element(app, kAXFocusedUIElementAttribute)
         let selected = field.flatMap { SurfaceProbe.string($0, kAXSelectedTextAttribute) }
         let caret = field.flatMap { field in
-            // A negative length, which an app may report for no selection, would trap as a range.
-            let selection = SurfaceProbe.selectedRange(field).map { range in
-                range.location..<(range.location + max(range.length, 0))
+            let selection = SurfaceProbe.selectedRange(field).flatMap { range in
+                AccessibilityRange.selection(location: range.location, length: range.length)
             }
             return CaretText.around(SurfaceProbe.string(field, kAXValueAttribute), selection: selection)
         }

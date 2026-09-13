@@ -254,8 +254,9 @@ private struct AXTextField: FocusedTextField, @unchecked Sendable {
             throw .insertionRejected(description: "the field will not report its selection")
         }
         guard
-            let widened = BackwardSelection.range(
-                in: whole, endingAt: selection.location, covering: replaced.count)
+            let widened = BackwardSelection.replacing(
+                in: whole, location: selection.location, length: selection.length,
+                covering: replaced.count)
         else {
             throw .insertionRejected(description: "the field has too little text before the caret")
         }
@@ -263,10 +264,7 @@ private struct AXTextField: FocusedTextField, @unchecked Sendable {
         guard BackwardSelection.confirms(replaced, in: whole, endingAt: selection.location) else {
             throw .insertionRejected(description: "the text before the caret is not what would be replaced")
         }
-        try select(
-            CFRange(
-                location: widened.lowerBound,
-                length: selection.length + (selection.location - widened.lowerBound)))
+        try select(CFRange(location: widened.lowerBound, length: widened.count))
         return selection
     }
 

@@ -127,8 +127,11 @@ extension FocusedFieldSnapshot {
 
     /// Whether the caret sits at the end of the line it is on, which completing presumes.
     public var caretAtLineEnd: Bool {
-        guard let selection, let value else { return false }
-        var index = Self.index(in: value, atUTF16Offset: selection.location + selection.length)
+        guard
+            let selection, let value,
+            let end = AccessibilityRange.end(location: selection.location, length: selection.length)
+        else { return false }
+        var index = Self.index(in: value, atUTF16Offset: end)
         // Only whitespace ahead still counts as the line's end, since a terminal pads the line with spaces.
         while index < value.endIndex {
             if value[index].isNewline { return true }
