@@ -39,7 +39,7 @@ struct SpeechModelLoadTests {
         #expect(load.recovery == nil)
     }
 
-    @Test("a failed load says so and offers another attempt")
+    @Test("a failed load says so and offers a fresh download")
     func failedCopy() {
         let load = SpeechModelLoad.failed
 
@@ -48,8 +48,8 @@ struct SpeechModelLoadTests {
         #expect(load.title == "The speech model didn’t load")
         #expect(load.line == "Speech model didn’t load")
         #expect(load.status == "Speech model didn’t load")
-        #expect(load.recovery == .retry)
-        #expect(load.message.contains("Try again"))
+        #expect(load.recovery == .downloadSpeechModel)
+        #expect(load.message.contains("Download it again"))
     }
 
     @Test("the spoken form carries no ellipsis and no dash a screen reader would skip")

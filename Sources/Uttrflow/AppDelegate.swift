@@ -236,6 +236,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return Set(file.load().consent.keys)
     }
 
+    /// Deletes a model that is on disk but will not load, and opens setup to download it again.
+    private func repairSpeechModel() {
+        try? modelStore.remove(.default)
+        speechReadiness = .notInstalled
+        refreshSpeechModelSurfaces()
+        show(.onboarding)
+    }
+
+    /// Loads a model that setup has just installed, so dictation works without a relaunch.
+    private func loadSpeechModelIfItArrived() {
+        guard speechReadiness == .notInstalled || speechReadiness == .loadFailed else { return }
+        loadSpeechModel()
+    }
+
     /// Loads the recogniser, saying so until it can dictate. See `Docs/startup.md`.
     private func loadSpeechModel() {
         guard modelStore.isInstalled(.default) else {
@@ -345,7 +359,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             refreshMainWindow()
         }
         // However the window goes, including the red button, which changes the Account page.
-        onboarding.onClose = { [weak self] in self?.refreshMainWindow() }
+        onboarding.onClose = { [weak self] in
+            self?.refreshMainWindow()
+            self?.loadSpeechModelIfItArrived()
+        }
         onboarding.present(skippingWelcome: skippingWelcome, askingToSignIn: askingToSignIn)
     }
 
@@ -1791,6 +1808,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         case .retry:
             // A toggle, not a synthesised keypress with no release to close it.
             Task { [weak self] in await self?.controller?.toggleFromControl() }
+        case .downloadSpeechModel where speechReadiness == .loadFailed:
+            repairSpeechModel()
         case .downloadSpeechModel:
             // Installing a model needs a window to show progress in. It has one now.
             show(.settings(.dictation))

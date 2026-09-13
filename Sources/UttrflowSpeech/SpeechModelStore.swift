@@ -39,6 +39,25 @@ public protocol SpeechModelStore: Sendable {
     func remove(_ model: SpeechModel) throws(SpeechEngineError)
 }
 
+/// What a model's compiled weights consist of; WhisperKit cannot load a directory missing any of them.
+public enum WeightsAssets {
+    /// The compiled bundles every WhisperKit variant needs to turn audio into tokens.
+    public static let bundleNames = ["MelSpectrogram", "AudioEncoder", "TextDecoder"]
+
+    /// The files a load reads from each bundle, relative to the model's directory.
+    public static let fileNames: [String] = bundleNames.flatMap {
+        ["\($0).mlmodelc/coremldata.bin", "\($0).mlmodelc/weights/weight.bin"]
+    }
+
+    /// Whether every weight file sits in `folder` and holds at least one byte.
+    public static func arePresent(in folder: URL) -> Bool {
+        fileNames.allSatisfy { name in
+            let size = try? folder.appending(path: name).resourceValues(forKeys: [.fileSizeKey]).fileSize
+            return (size ?? 0) > 0
+        }
+    }
+}
+
 /// A store backed by a directory, with the download injected. See `Docs/speech-model-install.md`.
 public struct FileSystemSpeechModelStore: SpeechModelStore {
     /// Fetches one part of one model into the given directory.
@@ -73,6 +92,16 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
         root.appending(path: model.variant, directoryHint: .isDirectory)
     }
 
+    /// Where this model's weights download before they are complete, so a killed download never reads as installed.
+    func stagingLocation(of model: SpeechModel) -> URL {
+        stagingRoot.appending(path: model.variant, directoryHint: .isDirectory)
+    }
+
+    /// The directory every half-finished weights download sits in, hidden beside the models.
+    private var stagingRoot: URL {
+        root.appending(path: ".partial", directoryHint: .isDirectory)
+    }
+
     /// Whether the weights *and* the tokenizer are on disk. See `Docs/speech-model-install.md`.
     public func isInstalled(_ model: SpeechModel) -> Bool {
         missingComponents(of: model).isEmpty
@@ -83,11 +112,8 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
         let folder = location(of: model)
         return ModelComponent.allCases.filter { component in
             switch component {
-            // Any file that is not the tokenizer's, since a tokenizer alone is no model.
             case .weights:
-                !files(in: folder).contains {
-                    !TokenizerAssets.fileNames.contains($0.lastPathComponent)
-                }
+                !WeightsAssets.arePresent(in: folder)
             case .tokenizer:
                 !TokenizerAssets.arePresent(in: folder)
             }
@@ -115,44 +141,101 @@ public struct FileSystemSpeechModelStore: SpeechModelStore {
     ) async throws(SpeechEngineError) -> URL {
         let destination = location(of: model)
         for component in missingComponents(of: model) {
-            try await fetch(component, of: model, into: destination, onProgress: onProgress)
+            switch component {
+            case .weights:
+                try await fetchWeights(of: model, into: destination, onProgress: onProgress)
+            case .tokenizer:
+                try await fetchTokenizer(of: model, into: destination, onProgress: onProgress)
+            }
         }
 
         onProgress(1)
         return destination
     }
 
-    /// Fetches one part, and leaves nothing behind that would be mistaken for it.
-    private func fetch(
-        _ component: ModelComponent, of model: SpeechModel, into destination: URL,
+    /// Downloads the weights into staging and moves them into place only once all of them are there.
+    private func fetchWeights(
+        of model: SpeechModel, into destination: URL,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws(SpeechEngineError) {
+        let staging = stagingLocation(of: model)
         do {
-            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
-            try await download(model, component, destination, onProgress)
+            try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+            // Staging is kept on failure, so asking again resumes from the files already fetched.
+            try await download(model, .weights, staging, onProgress)
         } catch {
-            unwind(component, at: destination)
             throw .modelDownloadFailed(description: error.localizedDescription)
         }
 
         // Checked here, or a download that reports success and produces nothing surfaces a launch later.
-        guard !missingComponents(of: model).contains(component) else {
-            unwind(component, at: destination)
+        guard WeightsAssets.arePresent(in: staging) else {
+            discardStaging(of: model)
             throw .modelDownloadFailed(
-                description: "the download completed but \(component.described) did not arrive")
+                description: "the download completed but \(ModelComponent.weights.described) did not arrive")
+        }
+
+        do {
+            try commit(staging, into: destination)
+        } catch {
+            throw .modelDownloadFailed(description: error.localizedDescription)
         }
     }
 
-    /// Undoes a part-way fetch in proportion to it. See `Docs/speech-model-install.md`.
-    private func unwind(_ component: ModelComponent, at destination: URL) {
-        switch component {
-        case .weights: try? fileManager.removeItem(at: destination)
-        case .tokenizer: TokenizerAssets.remove(from: destination)
+    /// Swaps complete staged weights in for the model's directory, carrying over a tokenizer already there.
+    private func commit(_ staging: URL, into destination: URL) throws {
+        for name in TokenizerAssets.fileNames {
+            let existing = destination.appending(path: name)
+            let staged = staging.appending(path: name)
+            if fileManager.fileExists(atPath: existing.path), !fileManager.fileExists(atPath: staged.path) {
+                try fileManager.moveItem(at: existing, to: staged)
+            }
         }
+        if fileManager.fileExists(atPath: destination.path) {
+            _ = try fileManager.replaceItemAt(destination, withItemAt: staging)
+        } else {
+            try fileManager.moveItem(at: staging, to: destination)
+        }
+        removeStagingRootIfEmpty()
+    }
+
+    /// Fetches the tokenizer beside the weights, and removes half of one rather than leave it.
+    private func fetchTokenizer(
+        of model: SpeechModel, into destination: URL,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws(SpeechEngineError) {
+        do {
+            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+            try await download(model, .tokenizer, destination, onProgress)
+        } catch {
+            TokenizerAssets.remove(from: destination)
+            throw .modelDownloadFailed(description: error.localizedDescription)
+        }
+
+        guard TokenizerAssets.arePresent(in: destination) else {
+            TokenizerAssets.remove(from: destination)
+            throw .modelDownloadFailed(
+                description: "the download completed but \(ModelComponent.tokenizer.described) did not arrive"
+            )
+        }
+    }
+
+    /// Deletes a half-finished weights download for `model`.
+    private func discardStaging(of model: SpeechModel) {
+        try? fileManager.removeItem(at: stagingLocation(of: model))
+        removeStagingRootIfEmpty()
+    }
+
+    /// Removes the staging directory once no download is using it.
+    private func removeStagingRootIfEmpty() {
+        guard (try? fileManager.contentsOfDirectory(atPath: stagingRoot.path))?.isEmpty == true else {
+            return
+        }
+        try? fileManager.removeItem(at: stagingRoot)
     }
 
     /// Deletes the model. Does nothing if it is not installed.
     public func remove(_ model: SpeechModel) throws(SpeechEngineError) {
+        discardStaging(of: model)
         let location = location(of: model)
         guard fileManager.fileExists(atPath: location.path) else { return }
         do {

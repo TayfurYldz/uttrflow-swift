@@ -84,8 +84,8 @@ the one home for the words and for when the minutes are said.
 
 | Where | While loading | If the load fails |
 |---|---|---|
-| Home page | A card: **Loading the speech model…** with a spinner, and the ring's status reads *Loading speech model*. | **The speech model didn’t load**, with **Try Again**. |
-| Floating button | A wide pill with an hourglass: **Loading speech model…** | **Speech model didn’t load**, with **Try Again**. |
+| Home page | A card: **Loading the speech model…** with a spinner, and the ring's status reads *Loading speech model*. | **The speech model didn’t load**, with **Download**. |
+| Floating button | A wide pill with an hourglass: **Loading speech model…** | **Speech model didn’t load**, with **Download**. |
 | Shortcut or button pressed | **Speech model still loading…** through the same notice every dictation failure uses, informational, and the microphone never opens. | Dictation starts, and the recogniser tries the load again on demand. |
 | Clipboard panel | The microphone is off: *Speech model still loading*. | Off, as for a model that is not ready. |
 | Menu bar | *Getting ready…* | *Speech model didn't load* |
@@ -99,7 +99,11 @@ There is no progress bar, because nothing reports how far a load has got.
 The refusal lives in `DictationPipeline.startRecording`, which declines while its own `prepare()`
 is running. A pipeline nobody prepared still records and loads on demand, as before. When the
 load ends the refusal's notice is cleared, and every surface goes back to what it drew before.
-**Try Again** on a failed load loads again rather than starting a dictation.
+**Download** on a failed load deletes the model that will not load and opens setup to fetch it
+again; closing setup loads whatever it installed. A model counts as installed only when every file
+a load reads is there, so a load that still fails is damage the store cannot see from outside, and
+a fresh copy is the repair. The notice a failed load raises in the pipeline keeps **Try Again**,
+which loads again rather than starting a dictation.
 
 ## What is still true
 

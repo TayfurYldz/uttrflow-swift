@@ -22,8 +22,12 @@ fetched weights.
 An empty directory is what a cancelled download leaves behind, and is likewise not installed:
 treating it as installed would fail later, further from the cause.
 
-Weights are detected as "any file in the directory that is not part of the tokenizer", since
-a directory holding nothing but a tokenizer has no model in it.
+Weights are detected by the files a load reads (`WeightsAssets`): `coremldata.bin` and
+`weights/weight.bin` inside each of `MelSpectrogram.mlmodelc`, `AudioEncoder.mlmodelc` and
+`TextDecoder.mlmodelc`, each at least one byte. Any other file counting as weights is how a
+download killed partway came to read as installed, fail every load, and never be repaired.
+There is no manifest of sizes to check against, so a file truncated to a non-zero length is not
+detected here; staging below is what keeps one from arriving in the model's directory.
 
 ## Missing components are ordered weights-first
 
@@ -39,20 +43,28 @@ apologise.
 A download that reports success and produces nothing is checked for on the spot, rather than
 being discovered a launch later as a model that will not load.
 
+## Weights are staged, then moved in whole
+
+The weights download into `<root>/.partial/<variant>/`, never into the model's directory. Only
+when every weight file is there are they moved in: a tokenizer already in the model's directory is
+carried into staging, and staging then replaces the directory in one `replaceItemAt`. A process
+killed at any point before that leaves the model's directory as it was, so nothing half-fetched is
+ever mistaken for a model.
+
 ## Unwinding a failed fetch, in proportion
 
 | Failed component | What is removed        | Why |
 |------------------|------------------------|-----|
-| weights          | the whole directory    | what it left is unusable and indistinguishable from a complete install by size alone |
+| weights, with an error | nothing; staging is kept | the files already fetched let asking again resume instead of restarting, and the model's directory was never touched |
+| weights, reported done but incomplete | the staging directory | what it holds is not a model and would not become one by resuming |
 | tokenizer        | the tokenizer only     | the weights beside it may be six hundred megabytes the user has already waited for, and are still perfectly good |
 
-`isInstalled` already refuses to call what remains usable, so nothing can mistake a
-weights-only directory for a working model in the meantime.
+`remove(_:)` discards staging along with the model.
 
 ## Hoisting the download out of its wrapper
 
 Model repositories nest their output — WhisperKit's lands in
-`destination/models/<repo>/<variant>/`. The store's contract is that a model's files sit
+`<staging>/models/<repo>/<variant>/`. The store's contract is that a model's files sit
 directly in `location(of:)`, so the nesting is undone in `hoist(contentsOf:into:)` rather than
 leaking into every caller that needs a path. The wrapper directory is identified *before*
 anything moves; afterwards there is nothing left to identify it by.
