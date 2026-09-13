@@ -89,6 +89,13 @@ public enum DictationPresenter {
                 showsWaveform: false, showsProgress: false, isRecording: false, action: nil,
                 accessibilityLabel: "Inserted: \(outcome.text)")
 
+        // Drawn wide with its words, not as the quiet disc the other informational notice gets.
+        case .failed(let failure) where failure == .stillLoading:
+            DockPresentation(
+                symbolName: "hourglass", primaryLine: failure.message, secondaryLine: nil,
+                showsWaveform: false, showsProgress: false, isRecording: false, action: nil,
+                accessibilityLabel: failure.message.filter { $0 != "…" } + ".")
+
         case .failed(let failure):
             DockPresentation(
                 // "Didn't catch that" is not an alarm, so the badge follows the softer severity.
@@ -99,6 +106,32 @@ public enum DictationPresenter {
                 showsWaveform: false, showsProgress: false, isRecording: false,
                 action: failure.recovery,
                 accessibilityLabel: failure.message)
+        }
+    }
+
+    /// The button with the speech model's load drawn in where it would otherwise rest or fall silent.
+    public static func dock(
+        for state: DictationState, advice: DictationAdvice = .keepGoing, speechModel: SpeechModelLoad?
+    ) -> DockPresentation {
+        let drawn = dock(for: state, advice: advice)
+        guard let load = speechModel else { return drawn }
+        switch state {
+        case .idle:
+            return DockPresentation(
+                symbolName: load.isLoading ? "hourglass" : "exclamationmark.triangle",
+                primaryLine: load.line, secondaryLine: load.detail,
+                showsWaveform: false, showsProgress: false, isRecording: false,
+                action: load.recovery, accessibilityLabel: load.accessibilityLabel)
+        case .failed(let failure) where failure.transcript == nil:
+            // The failure keeps its own line and button; the second line says why dictation cannot start.
+            return DockPresentation(
+                symbolName: drawn.symbolName, primaryLine: drawn.primaryLine,
+                secondaryLine: load.detail, showsWaveform: false, showsProgress: false,
+                isRecording: false, action: drawn.action,
+                accessibilityLabel: failure == .stillLoading
+                    ? load.accessibilityLabel : "\(drawn.accessibilityLabel) \(load.accessibilityLabel)")
+        case .recording, .transcribing, .tidying, .inserting, .inserted, .failed:
+            return drawn
         }
     }
 
