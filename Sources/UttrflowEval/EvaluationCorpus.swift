@@ -77,6 +77,13 @@ public enum EvaluationCorpus {
             expected: "I took her to the ER last night.",
             mustKeep: ["ER"]
         ),
+        // No determiner stands before "ER" here, so only the meaning guard is left to notice the filler pass took a word.
+        .init(
+            id: "acronym-spelled-like-a-filler", category: .everyday,
+            spoken: "we rushed him to ER before midnight",
+            expected: "We rushed him to ER before midnight.",
+            mustKeep: ["ER"]
+        ),
         // The unwrapper's case: a quote pair the recogniser reported is the speaker's, not the model's packaging.
         .init(
             id: "quoted-whole-utterance", category: .everyday,
@@ -179,6 +186,13 @@ public enum EvaluationCorpus {
             spoken: "no I don't think so we should wait for the results",
             expected: "No, I don't think so. We should wait for the results.",
             mustKeep: ["no", "wait", "results"]
+        ),
+        // "no" answers here, and the words around it are said once each way, so no half was taken back.
+        .init(
+            id: "answer-no-before-a-restated-phrase", category: .everyday,
+            spoken: "tell the landlord no, the landlord has to wait",
+            expected: "Tell the landlord no, the landlord has to wait.",
+            mustKeep: ["no", "landlord", "wait"]
         ),
         // The trigger heads each item of a list here, so neither item is a half the speaker took back.
         .init(
