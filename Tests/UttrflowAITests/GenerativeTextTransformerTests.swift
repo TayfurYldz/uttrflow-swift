@@ -262,6 +262,17 @@ struct GenerativeTextTransformerTests {
         }
     }
 
+    /// "Answer" dictated after a line break is the speaker's label, so the line above it is not the model's echo.
+    @Test("keeps both lines when the speaker dictates a label on a later line")
+    func keepsALabelDictatedMidway() async throws {
+        let model = FakeCleanupModel { _ in "Do we discount?\nAnswer: We do not discount." }
+        let sut = GenerativeTextTransformer(kind: .foundationModels, model: model)
+
+        let result = try await sut.transform(
+            request("do we discount new line answer colon we do not discount"))
+        #expect(result.text == "Do we discount?\nAnswer: We do not discount.")
+    }
+
     @Test("surfaces a model failure rather than returning the raw transcript silently")
     func surfacesModelFailure() async {
         let model = FakeCleanupModel()

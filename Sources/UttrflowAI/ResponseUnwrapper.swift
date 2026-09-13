@@ -6,34 +6,46 @@ public enum ResponseUnwrapper {
         "cleaned", "output", "result", "text", "response", "answer", "corrected", "rewritten",
     ]
 
-    /// The answer without its wrapper; a label the speaker said themselves ("Output: ship it") stays.
+    /// The answer without its wrapper; a label the speaker opened any line with ("Output: ship it") stays.
     public static func unwrap(_ rewritten: String, spoken: String) -> String {
-        var text = lastLabelledLine(in: rewritten.trimmed(), unless: spoken)
-        text = stripLabel(from: text, unless: spoken)
+        let said = openingWords(of: spoken)
+        var text = lastLabelledLine(in: rewritten.trimmed(), unless: said)
+        text = stripLabel(from: text, unless: said)
         text = stripSurroundingQuotes(text, unless: spoken)
         // A model that wrote `Cleaned: "…"` needs both removed, in that order.
-        return stripLabel(from: text, unless: spoken).trimmed()
+        return stripLabel(from: text, unless: said).trimmed()
     }
 
-    /// The answer from a reply that replayed the whole exchange: everything from the last labelled line on.
-    private static func lastLabelledLine(in text: String, unless spoken: String) -> String {
-        let lines = text.split(whereSeparator: \.isNewline).map { String($0).trimmed() }
+    /// The first word of every line of the draft, lowercased and without punctuation: where a speaker's own label stands.
+    private static func openingWords(of spoken: String) -> Set<String> {
+        Set(
+            spoken.split(whereSeparator: \.isNewline).compactMap { line in
+                line.split(whereSeparator: \.isWhitespace).first.map {
+                    String($0.filter(\.isLetter)).lowercased()
+                }
+            })
+    }
+
+    /// The answer from a reply that replayed the whole exchange: everything from the last labelled line on, breaks kept.
+    private static func lastLabelledLine(in text: String, unless said: Set<String>) -> String {
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .map { String($0).trimmed() }
         guard lines.count > 1 else { return text }
 
         let lastLabelled = lines.lastIndex { line in
-            stripLabel(from: line, unless: spoken) != line
+            stripLabel(from: line, unless: said) != line
         }
         guard let lastLabelled else { return text }
-        return lines[lastLabelled...].joined(separator: " ")
+        return lines[lastLabelled...].joined(separator: "\n")
     }
 
-    /// Removes a known label and its colon, unless the speaker's own words begin with that label.
-    private static func stripLabel(from text: String, unless spoken: String) -> String {
+    /// Removes a known label and its colon, unless a line of the draft opens with that label as a word.
+    private static func stripLabel(from text: String, unless said: Set<String>) -> String {
         guard let colon = text.firstIndex(of: ":") else { return text }
         let label = String(text[text.startIndex..<colon]).trimmed().lowercased()
         guard labels.contains(label) else { return text }
         // The speaker said it, so it is theirs to keep.
-        guard !spoken.trimmed().lowercased().hasPrefix(label) else { return text }
+        guard !said.contains(label) else { return text }
         return String(text[text.index(after: colon)..<text.endIndex]).trimmed()
     }
 

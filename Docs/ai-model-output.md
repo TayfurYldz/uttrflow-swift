@@ -12,13 +12,17 @@ did the thing it catches. This file keeps the observations and the numbers.
 - Echoing the worked examples' packaging: `Cleaned: "…"`. The words inside were right; the
   first local model measured scored zero because of the wrapper alone.
 - Replaying the whole exchange: a 4B model returned the prompt back, then its answer under
-  its label. Everything before the last labelled line is the echo.
+  its label. Everything before the last labelled line is the echo, and the lines from it on
+  keep their breaks.
 
 The unwrapper is deliberately narrow: it strips a bare label from a known list and matched
 quotes around the whole answer, and only when the speaker did not say the wrapper themselves.
 Both strippers are shown the draft the passes produced and refuse what they find in it —
 "Output: ship it" survives, and so does a quotation the recogniser reported around the whole
-utterance, which is reported speech rather than the model's packaging. A sentence like
+utterance, which is reported speech rather than the model's packaging. A label is the
+speaker's when any line of the draft opens with it as a whole word, not only the first: a
+dictation that goes "new line, answer colon …" keeps its "Answer:" and the line above it,
+while "texting you now" does not protect a model's "Text:". A sentence like
 "Sure, here is the text:" is not a bare label and is left for the guard to reject, which is
 also the only thing that can: the guard trims punctuation off every token before comparing,
 so a deleted quote pair is invisible to it.
