@@ -362,8 +362,8 @@ public enum SettingsPresenter {
             callout: SettingsCallout(
                 symbolName: "lock",
                 message:
-                    "Completions come from what you have typed on this Mac. Nothing is uploaded, "
-                    + "and a password field is never read."))
+                    "Completions come from what you have typed on this Mac, kept in Uttrflow's own "
+                    + "folder. Nothing is uploaded, and a password field is never read."))
     }
 
     /// Says what the model is doing, since a switch that is on and silent is indistinguishable from broken.

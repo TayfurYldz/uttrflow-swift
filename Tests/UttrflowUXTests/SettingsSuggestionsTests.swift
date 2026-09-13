@@ -446,4 +446,26 @@ struct MenuBarFeatureTests {
         #expect(try #require(on.commands.first { $0.intent == .startDictation }).isEnabled)
         #expect(try #require(on.commands.first { $0.intent == .openClipboard }).isEnabled)
     }
+
+    // MARK: - Applications the loop has met
+
+    /// The alert used to ask in front of whatever the user was writing; the switch has to exist instead.
+    @Test("names an application the loop has met but that has taught it nothing")
+    func namesAnApplicationTheLoopHasMet() {
+        let shown = pane(
+            switchedOn(),
+            personalisation: SettingsPersonalisation(
+                learnedWords: 0, addedWords: 0, transcripts: 0, met: [notes]))
+
+        #expect(shown.groups.flatMap(\.rows).contains { $0.id == "suggestionsIn.\(notes)" })
+    }
+
+    /// The promise the alert carried — where what you type is kept — must survive it.
+    @Test("says where what the user types is kept")
+    func saysWhereTypingIsKept() {
+        let shown = pane(switchedOn())
+
+        #expect(shown.callout?.message.contains("kept in Uttrflow's own folder") == true)
+        #expect(shown.callout?.message.contains("Nothing is uploaded") == true)
+    }
 }
