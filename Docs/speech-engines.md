@@ -130,3 +130,30 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
   WhisperKit release or model variant that finds another way to return nothing must cost the
   user a slower dictation, never a silent one. Silence transcribes to nothing too, so this can
   decode twice for no gain, which is the right price.
+
+## One call into the recogniser at a time
+
+A loaded WhisperKit is one set of models with shared decoder state: the logits filters a
+prompted decode installs live on the kit, not on the call. Two decodes on one kit at once
+therefore read each other's rules, and on a slow Mac they also split the same CPU and memory.
+
+An actor does not prevent that. Every `await` inside an actor method lets the next caller
+in, and a decode is nothing but awaits, so `WhisperKitBackend` being an actor serialises
+nothing across a transcription. Nor does the pipeline: a stage that times out is cancelled
+and not awaited (see `Docs/stuck-recording.md`), and cancelling a dictation abandons its
+decode without cancelling it at all, so a dictation started straight afterwards reaches the
+recogniser while the old decode is still running.
+
+`BackedSpeechEngine` therefore holds a `RecogniserTurn` across every load and decode. Calls
+are admitted one at a time in the order they arrived; a later call waits for the earlier one
+to leave the recogniser, and a waiter that is cancelled — the pipeline's stage timeout does
+exactly that — leaves the queue and never decodes. The wait is bounded by the same stage
+limit as the decode, so a dictation stuck behind a wedged decode fails and names a retry
+rather than showing "transcribing" for ever.
+
+Measured with the default model on synthetic speech: a cancelled decode stops within about
+ten milliseconds, since WhisperKit checks for cancellation before every decoder step, so
+after a timeout the wait is short. After a cancelled dictation it is the rest of that
+decode. Four overlapping decodes on one kit, two with a prompt and two without, returned
+the unprompted text for both prompted decodes in one round of three: the filters of one
+call had been replaced by another's.

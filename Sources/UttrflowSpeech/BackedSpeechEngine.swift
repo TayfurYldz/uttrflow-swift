@@ -10,6 +10,8 @@ public actor BackedSpeechEngine: SpeechEngine {
 
     private let backend: any TranscriptionBackend
     private var isLoaded = false
+    /// One call into the recogniser at a time, since actor reentrancy lets a second in at every await. See `Docs/speech-engines.md`.
+    private let turn = RecogniserTurn()
 
     public init(
         kind: SpeechEngineKind,
@@ -20,6 +22,14 @@ public actor BackedSpeechEngine: SpeechEngine {
     }
 
     public func prepare() async throws(SpeechEngineError) {
+        guard !isLoaded else { return }
+        try await turn.take()
+        defer { turn.release() }
+        try await loadIfNeeded()
+    }
+
+    /// Loads the recogniser unless a call that held the turn earlier already did; the caller holds the turn.
+    private func loadIfNeeded() async throws(SpeechEngineError) {
         guard !isLoaded else { return }
         try await backend.load()
         isLoaded = true
@@ -35,8 +45,12 @@ public actor BackedSpeechEngine: SpeechEngine {
         guard let speech = audio.speechOnly() else { throw .nothingHeard }
         guard speech.audio.duration >= Self.minimumDuration else { throw .nothingHeard }
 
+        // Held until the recogniser answers, so an abandoned decode still running is waited for rather than overlapped.
+        try await turn.take()
+        defer { turn.release() }
+
         // A caller that forgot to prepare gets a slow first transcription, not a failure.
-        try await prepare()
+        try await loadIfNeeded()
 
         // Ranked once for the dictation and carried in, so every piece is biased towards the same words.
         let raw = try await backend.transcribe(
