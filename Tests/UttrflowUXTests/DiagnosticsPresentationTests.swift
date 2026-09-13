@@ -61,8 +61,9 @@ struct DiagnosticsLatencyTests {
         #expect(page.latency?.stages.map(\.stage) == PipelineStage.allCases)
         #expect(
             page.latency?.stages.map(\.title) == [
-                "Recording", "Finishing the piece already under way", "Transcribing",
-                "Checking the dictionary", "Tidying up", "Expanding snippets", "Inserting",
+                "Opening the microphone", "Recording", "Finishing the piece already under way",
+                "Transcribing", "Checking the dictionary", "Tidying up", "Expanding snippets",
+                "Inserting",
             ])
         #expect(page.latency?.unmeasured.isEmpty == true)
     }
@@ -79,8 +80,8 @@ struct DiagnosticsLatencyTests {
         #expect(page.latency?.stages.last?.typical == "under 0.01s", "measured, and instant")
         #expect(
             page.latency?.unmeasured.map(\.title) == [
-                "Recording", "Finishing the piece already under way", "Tidying up",
-                "Expanding snippets", "Inserting",
+                "Opening the microphone", "Recording", "Finishing the piece already under way",
+                "Tidying up", "Expanding snippets", "Inserting",
             ])
         #expect(page.latency?.unmeasured.allSatisfy { $0.detail == "Never run" } == true)
         #expect(page.latency?.unmeasured.allSatisfy { $0.state == .unknown } == true)

@@ -180,7 +180,10 @@ public actor DictationPipeline {
         generation += 1
         let mine = generation
         do {
-            try await capture.start()
+            // Measured because the user is already speaking: nothing is heard until this returns.
+            try await metrics.measuring(.microphoneOpen, clock: clock) { [capture] in
+                try await capture.start()
+            }
             guard !wasCancelled(mine) else {
                 // Cancelled while the microphone was opening: close it rather than listen on.
                 await capture.cancel()

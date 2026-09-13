@@ -307,7 +307,8 @@ struct DictationPipelineRecoveryTests {
         // Capture drains the buffer, the hold is `spokenFor`, and no piece is in flight here to wait for.
         #expect(
             measurements.map(\.stage) == [
-                .capture, .transcription, .correction, .transformation, .expansion, .insertion,
+                .microphoneOpen, .capture, .transcription, .correction, .transformation, .expansion,
+                .insertion,
             ])
         #expect(measurements.allSatisfy { $0.succeeded })
         #expect(

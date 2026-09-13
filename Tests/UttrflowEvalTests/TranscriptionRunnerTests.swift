@@ -132,7 +132,8 @@ struct TranscriptionRunnerTests {
         #expect(report.latency(for: .capture) == nil)
         #expect(
             report.unmeasuredStages == [
-                .capture, .drain, .correction, .transformation, .expansion, .insertion,
+                .microphoneOpen, .capture, .drain, .correction, .transformation, .expansion,
+                .insertion,
             ])
     }
 
