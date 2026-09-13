@@ -65,6 +65,8 @@ public actor DictationPipeline {
     private var earlyContext: AppContext?
     /// Ranked once per dictation, against the screen it began on, and given to every piece.
     private var dictationWords: [String]?
+    /// Detected by the first piece that reports one, and hinted to every later piece. See `Docs/early-transcription.md`.
+    private var dictationLanguage: LanguageCode?
 
     /// What the clean-up steps did to each piece of the dictation under way, reported as one when it ends.
     private var cleaningRecords: [CleaningRecord] = []
@@ -308,6 +310,7 @@ public actor DictationPipeline {
         earlyCut = 0
         earlyContext = nil
         dictationWords = nil
+        dictationLanguage = nil
         earlyWork = Task { [cleaner = runningCleaner, overrides = runningOverrides] in
             let seeing = await self.earlyContextRead(mine)
             guard self.isStillRunning(mine) else { return }
@@ -549,13 +552,16 @@ public actor DictationPipeline {
     ) async throws -> Transcription? {
         let slice =
             AudioSamples(samples: Array(audio.samples[window]), sampleRate: audio.sampleRate) ?? .empty
+        // One speaker does not change language between two halves of one utterance, so only the first piece detects.
+        let language = dictationLanguage
         let heard = try await metrics.measuring(.transcription, clock: clock) {
             try await withStageTimeout(StageTimeout.transcription, clock: clock) {
                 [speech] () async throws -> Heard in
                 do {
                     return Heard.words(
                         try await speech.transcribe(
-                            slice, options: TranscriptionOptions(vocabulary: words)))
+                            slice,
+                            options: TranscriptionOptions(languageHint: language, vocabulary: words)))
                 } catch SpeechEngineError.nothingHeard, SpeechEngineError.audioTooShort {
                     // Only when there is nothing else: alone, silence is refused below.
                     guard window != audio.samples.indices else { throw SpeechEngineError.nothingHeard }
@@ -568,6 +574,7 @@ public actor DictationPipeline {
             throw SpeechEngineError.transcriptionFailed(description: "the recogniser did not answer")
         }
         guard case .words(let transcription) = heard, !transcription.isBlank else { return nil }
+        if dictationLanguage == nil { dictationLanguage = transcription.detectedLanguage?.code }
         return transcription
     }
 
