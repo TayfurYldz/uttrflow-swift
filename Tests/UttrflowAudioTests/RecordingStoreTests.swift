@@ -153,4 +153,39 @@ struct RecordingStoreTests {
         let container = URL(fileURLWithPath: "/tmp/container")
         #expect(RecordingStore.defaultDirectory(in: container).path == "/tmp/container/Uttrflow/recordings")
     }
+
+    @Test("the shipped app keeps the recordings folder it already has")
+    func shippedAppKeepsItsFolder() {
+        let container = URL(fileURLWithPath: "/tmp/container")
+        let shipped = RecordingStore.defaultDirectory(in: container, for: LocalStore.productionIdentifier)
+        #expect(shipped.path == "/tmp/container/Uttrflow/recordings")
+    }
+
+    @Test("a development build keeps its recordings beside the shipped app's, not among them")
+    func developmentBuildHasItsOwnFolder() {
+        let container = URL(fileURLWithPath: "/tmp/container")
+        let development = RecordingStore.defaultDirectory(in: container, for: "com.uttrflow.Uttrflow.dev")
+        let shipped = RecordingStore.defaultDirectory(in: container, for: LocalStore.productionIdentifier)
+        #expect(development.path == "/tmp/container/Uttrflow.dev/recordings")
+        #expect(development.standardizedFileURL != shipped.standardizedFileURL)
+    }
+
+    @Test("pruning in a development build leaves the shipped app's recordings alone")
+    func pruningStaysInsideOneBuild() async throws {
+        let sandbox = Sandbox()
+        let container = sandbox.directory.deletingLastPathComponent()
+        let shipped = RecordingStore(
+            directory: RecordingStore.defaultDirectory(in: container, for: LocalStore.productionIdentifier))
+        let development = RecordingStore(
+            directory: RecordingStore.defaultDirectory(in: container, for: "com.uttrflow.Uttrflow.dev"),
+            retention: .seconds(60))
+        let writer = try #require(await shipped.begin(at: now))
+        let kept = await shipped.finish(writer)
+
+        #expect(await development.waiting(now: now.addingTimeInterval(120)).isEmpty)
+        await development.discard(kept.id)
+
+        #expect(FileManager.default.fileExists(atPath: writer.url.path))
+        #expect(await shipped.waiting(now: now) == [kept])
+    }
 }

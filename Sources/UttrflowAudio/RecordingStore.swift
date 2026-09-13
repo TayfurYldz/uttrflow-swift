@@ -24,9 +24,12 @@ public actor RecordingStore: RecordingKeeper {
         self.retention = retention
     }
 
-    /// Where recordings live when the app has not been told otherwise.
-    public static func defaultDirectory(in container: URL = .applicationSupportDirectory) -> URL {
-        container.appending(path: "Uttrflow/recordings", directoryHint: .isDirectory)
+    /// Where this build's recordings live, beside the other stores so a development build never prunes the shipped app's.
+    public static func defaultDirectory(
+        in container: URL = .applicationSupportDirectory,
+        for identifier: String? = Bundle.main.bundleIdentifier
+    ) -> URL {
+        LocalStore.directory("recordings", in: container, for: identifier)
     }
 
     // MARK: - Writing

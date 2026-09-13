@@ -42,6 +42,13 @@ struct LocalStoreTests {
         #expect(models.hasDirectoryPath)
     }
 
+    @Test("A directory named for another build lands under that build's folder.")
+    func directoriesLandUnderANamedBuildsFolder() {
+        let container = URL(filePath: "/tmp/container", directoryHint: .isDirectory)
+        let development = LocalStore.directory("recordings", in: container, for: "com.uttrflow.Uttrflow.dev")
+        #expect(development.path(percentEncoded: false) == "/tmp/container/Uttrflow.dev/recordings/")
+    }
+
     @Test("A test runner is not a variant, so the suite reads the folder the app reads.")
     func theTestRunnerIsNotAVariant() {
         #expect(LocalStore.folder == "Uttrflow")
