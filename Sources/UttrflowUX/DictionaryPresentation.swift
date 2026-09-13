@@ -215,12 +215,13 @@ public enum DictionaryPresenter {
             footnote: rows.isEmpty ? nil : footnote(for: listed))
     }
 
-    /// What the three origins mean, and what a retired word is only when one is on screen.
+    /// What the four origins mean, and what a retired word is only when one is on screen.
     static func footnote(for entries: [DictionaryEntry]) -> String {
         let origins = """
             Learned means you said a word again over the spelling Uttrflow got wrong, and it \
             kept yours. Seen on screen means the title of what you were working in kept \
-            saying it while you spoke. Added by you means you typed it in here. Every word \
+            saying it while you spoke. Added by you means you typed it in here. Shipped with \
+            Uttrflow means it came with the app; delete it and it stays deleted. Every word \
             here stays on this Mac.
             """
         guard entries.contains(where: { !$0.isTrustworthy }) else { return origins }
@@ -265,6 +266,7 @@ public enum DictionaryPresenter {
         case .learned: "Learned"
         case .added: "Added by you"
         case .observed: "Seen on screen"
+        case .shipped: "Shipped with Uttrflow"
         }
     }
 
