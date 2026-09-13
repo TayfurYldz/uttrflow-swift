@@ -35,20 +35,23 @@ public actor WhisperKitBackend: TranscriptionBackend {
 
         do {
             // `download: false`, so a missing model is a clear error rather than a silent stall.
-            kit = LoadedKit(
-                try await WhisperKit(
-                    WhisperKitConfig(
-                        model: model.variant,
-                        modelFolder: modelFolder.path,
-                        // Tokenizer search stays in the model's directory, never the Hugging Face cache.
-                        tokenizerFolder: modelFolder,
-                        verbose: false,
-                        logLevel: .error,
-                        prewarm: true,
-                        load: true,
-                        download: false
-                    )
-                ))
+            let whisper = try await WhisperKit(
+                WhisperKitConfig(
+                    model: model.variant,
+                    modelFolder: modelFolder.path,
+                    // Tokenizer search stays in the model's directory, never the Hugging Face cache.
+                    tokenizerFolder: modelFolder,
+                    verbose: false,
+                    logLevel: .error,
+                    prewarm: true,
+                    load: true,
+                    download: false
+                )
+            )
+            // Detection may only answer in a language the product transcribes, so Hindi is never heard as Urdu.
+            whisper.textDecoder = LanguageHeldDecoder(
+                wrapping: whisper.textDecoder, languages: LanguageCode.transcribed)
+            kit = LoadedKit(whisper)
         } catch {
             throw .modelLoadFailed(description: error.localizedDescription)
         }

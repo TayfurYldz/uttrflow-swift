@@ -29,6 +29,9 @@ extension LanguageCode {
     /// `"hi"`.
     public static let hindi = LanguageCode(unchecked: "hi")
 
+    /// The languages the product transcribes, and so the only ones the recogniser may detect.
+    public static let transcribed: [LanguageCode] = [.english, .hindi]
+
     /// Bypasses validation for compile-time-known-good literals.
     private init(unchecked value: String) {
         self.value = value
