@@ -40,6 +40,59 @@ private actor NumberingSpeechEngine: SpeechEngine {
     var calls: Int { sampleCounts.count }
 }
 
+/// A recogniser whose first recognition does not finish until the test lets it, so the key can come up mid-recognition.
+private actor HeldSpeechEngine: SpeechEngine {
+    let kind = SpeechEngineKind.whisperKit
+    private(set) var calls = 0
+    private var held: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func prepare() async throws(SpeechEngineError) {}
+
+    func transcribe(
+        _ audio: AudioSamples, options: TranscriptionOptions
+    ) async throws(SpeechEngineError) -> Transcription {
+        calls += 1
+        if calls == 1, !released { await withCheckedContinuation { held = $0 } }
+        return Transcription(
+            text: "w\(calls) x", detectedLanguage: DetectedLanguage(code: .english, confidence: 1),
+            audioDuration: audio.duration)
+    }
+
+    /// Lets the first recognition finish, whether or not it has begun waiting yet.
+    func release() {
+        released = true
+        held?.resume()
+        held = nil
+    }
+
+    var isHolding: Bool { held != nil }
+}
+
+/// A tidier whose first tidy does not finish until the test lets it, so the key can come up mid-tidy.
+private actor HeldCleaner: TranscriptCleaning {
+    private var calls = 0
+    private var held: CheckedContinuation<Void, Never>?
+    private var released = false
+
+    func clean(_ request: TransformationRequest) async throws(TransformationError) -> TransformationResult {
+        calls += 1
+        if calls == 1, !released { await withCheckedContinuation { held = $0 } }
+        return TransformationResult(text: request.transcription.text, producedBy: .foundationModels)
+    }
+
+    nonisolated func warm(for situation: Situation?) async {}
+
+    /// Lets the first tidy finish, whether or not it has begun waiting yet.
+    func release() {
+        released = true
+        held?.resume()
+        held = nil
+    }
+
+    var isHolding: Bool { held != nil }
+}
+
 /// A tidier that shouts, so its work on each piece can be seen, and remembers where it was warmed for.
 private final class ShoutingCleaner: TranscriptCleaning, Sendable {
     private let state = Mutex((warmed: [Destination?](), seen: [String]()))
@@ -542,18 +595,49 @@ struct DictationPipelineEarlyWorkTests {
             "every tidy but the last runs beside the next recognition")
     }
 
+    /// Releases the key while `holding` is true of the first piece, then lets that piece finish once the release is waiting on it.
+    private func releaseMidPiece(
+        _ pipeline: DictationPipeline, holding: @Sendable () async -> Bool, letGo: @Sendable () async -> Void
+    ) async {
+        await pipeline.startRecording()
+        for _ in 0..<2000 where await !holding() {
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(await holding(), "the first piece never reached the stage being held")
+        let finishing = Task { await pipeline.finishRecording() }
+        for _ in 0..<2000 where await pipeline.currentState != .transcribing {
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        await letGo()
+        await finishing.value
+    }
+
     /// The drain begins when the key comes up, so the user waits through it and Diagnostics must say so.
-    @Test("charges the wait for the in-flight piece to a stage of its own")
+    @Test("charges the wait to the drain when the key comes up while the piece is being tidied")
     func measuresTheDrain() async {
         let capture = FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces))
         await capture.setCaptured(Take.threePieces)
-        let speech = NumberingSpeechEngine()
+        let cleaner = HeldCleaner()
+        let metrics = RecordingMetricsRecorder()
+        let pipeline = makePipeline(capture: capture, cleaner: cleaner, metrics: metrics)
+
+        await releaseMidPiece(
+            pipeline, holding: { await cleaner.isHolding }, letGo: { await cleaner.release() })
+
+        #expect(await metrics.measurements.contains { $0.stage == .drain })
+    }
+
+    /// Issue 344: recognition is usually the longer half of the in-flight piece, and was the half the drain missed.
+    @Test("charges the wait to the drain when the key comes up while the piece is still being recognised")
+    func measuresTheDrainDuringRecognition() async {
+        let capture = FakeAudioCaptureEngine(stopOutcome: .success(Take.threePieces))
+        await capture.setCaptured(Take.threePieces)
+        let speech = HeldSpeechEngine()
         let metrics = RecordingMetricsRecorder()
         let pipeline = makePipeline(capture: capture, speech: speech, metrics: metrics)
 
-        await pipeline.startRecording()
-        await waitForCalls(1, on: speech)
-        await pipeline.finishRecording()
+        await releaseMidPiece(
+            pipeline, holding: { await speech.isHolding }, letGo: { await speech.release() })
 
         #expect(await metrics.measurements.contains { $0.stage == .drain })
     }

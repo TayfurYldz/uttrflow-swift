@@ -60,7 +60,7 @@ public actor DictationPipeline {
     private var earlySpans: [Span] = []
     private var earlyCut = 0
     private var earlyWork: Task<Void, Never>?
-    /// Whether a piece is being recognised right now, which is what makes the drain a wait worth timing.
+    /// Whether a piece is being recognised or tidied right now, which is what makes the drain a wait worth timing.
     private var pieceInFlight = false
     private var earlyContext: AppContext?
     /// Ranked once per dictation, against the screen it began on, and given to every piece.
@@ -333,6 +333,9 @@ public actor DictationPipeline {
             else { continue }
 
             let seeing = await earlyContextRead(mine)
+            // From recognition to tidied, so a key released during either is charged to the drain.
+            pieceInFlight = true
+            defer { pieceInFlight = false }
             let heard: Transcription?
             do {
                 heard = try await transcribe(
@@ -347,9 +350,7 @@ public actor DictationPipeline {
             }
             guard generation == mine, !wasCancelled(mine) else { return }
             if let heard {
-                pieceInFlight = true
                 let piece = await finish(heard, seeing: seeing, recording: NoOpMetricsRecorder())
-                pieceInFlight = false
                 guard generation == mine, !wasCancelled(mine) else { return }
                 earlySpans.append(.done(piece))
             }
