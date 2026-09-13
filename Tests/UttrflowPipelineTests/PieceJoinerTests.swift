@@ -319,53 +319,58 @@ struct PieceJoinerWholeTests {
     }
 }
 
-@Suite("The final stop is the message's, not the last piece's")
-struct PieceJoinerStopTests {
-    /// The inversion: spoken in one breath it keeps its stop, and cut into three it used to lose it.
-    @Test("stops a message long enough for the rule, however many pieces it was cut into")
-    func stopsALongMessageSpokenInPieces() {
+@Suite("A seam ends a sentence the way the place ends one; the final stop is left to the message")
+struct PieceJoinerSeamTests {
+    /// Cut at its sentence ends, a chat message keeps a stop at every seam, as it would in one breath.
+    @Test("stops every seam of a chat message and leaves its end to the message stage")
+    func stopsTheSeamsOfAChatMessage() {
         let pieces = ["I left the office", "The traffic is bad", "I will be late"]
 
         let whole = PieceJoiner.join(pieces.map { piece($0) }, under: .standard(for: .messaging))
 
-        #expect(whole.cleaned.text == "I left the office The traffic is bad I will be late.")
+        #expect(whole.cleaned.text == "I left the office. The traffic is bad. I will be late")
     }
 
-    @Test("leaves a short message unstopped, in pieces or not")
-    func leavesAShortMessageAlone() {
+    @Test("keeps a question mark at a seam rather than adding a stop after it")
+    func keepsAQuestionMarkAtASeam() {
         let whole = PieceJoiner.join(
-            [piece("On my way"), piece("Be there soon")], under: .standard(for: .messaging))
-
-        #expect(whole.cleaned.text == "On my way Be there soon")
-    }
-
-    /// Only the full stop was ever taken back, so a question mark must survive the whole-message question too.
-    @Test("keeps a question mark the speaker ended on")
-    func keepsAQuestionMark() {
-        let whole = PieceJoiner.join(
-            [piece("I am running late"), piece("Can you bring the charger?")],
+            [piece("Can you bring the charger?"), piece("I am running late")],
             under: .standard(for: .messaging))
 
-        #expect(whole.cleaned.text == "I am running late Can you bring the charger?")
+        #expect(whole.cleaned.text == "Can you bring the charger? I am running late")
     }
 
-    /// Every other policy already answered correctly per piece, and must be left exactly as it was.
     @Test(
-        "says nothing about a destination whose rule does not read the length",
-        arguments: [Destination.plain, .document, .email, .codeEditor])
-    func leavesOtherDestinationsAlone(destination: Destination) {
-        let pieces = [piece("I left the office."), piece("I will be late.")]
+        "stops the seams of every place whose policy stops sentences",
+        arguments: [Destination.plain, .document, .email, .messaging])
+    func stopsSeamsWherePlacesStop(destination: Destination) {
+        let whole = PieceJoiner.join(
+            [piece("I left the office"), piece("I will be late")], under: .standard(for: destination))
 
-        let whole = PieceJoiner.join(pieces, under: .standard(for: destination))
-
-        #expect(
-            whole.cleaned.text
-                == PieceJoiner.laidOut(
-                    pieces.map(\.cleaned.text), under: .standard(for: destination)))
+        #expect(whole.cleaned.text == "I left the office. I will be late")
     }
 
-    /// A single piece is already the whole message, so the joiner is not the one that decides.
-    @Test("leaves a one-piece dictation to the pass that already answered it")
+    @Test(
+        "takes a stop off every seam where the place never has one",
+        arguments: [Destination.codeEditor, .spreadsheet])
+    func strippedSeamsWherePlacesNeverStop(destination: Destination) {
+        let whole = PieceJoiner.join(
+            [piece("git status."), piece("git diff.")], under: .standard(for: destination))
+
+        #expect(whole.cleaned.text == "git status git diff.")
+    }
+
+    @Test("leaves a seam alone where a list item ends the piece or the code keeps its lines")
+    func leavesListsAndCodeLinesAlone() {
+        let item = PieceJoiner.seamed(["\n- Milk", "then eggs"], under: .standard(for: .document))
+        let code = PieceJoiner.seamed(["let a = 1\nlet b = 2", "done"], under: .standard(for: .sqlEditor))
+
+        #expect(item == ["\n- Milk", "then eggs"])
+        #expect(code == ["let a = 1\nlet b = 2", "done"])
+    }
+
+    /// A single piece is already the whole message, so the joiner has no seam to end.
+    @Test("leaves a one-piece dictation to the message stage")
     func leavesOnePieceAlone() {
         let whole = PieceJoiner.join([piece("On my way")], under: .standard(for: .messaging))
 

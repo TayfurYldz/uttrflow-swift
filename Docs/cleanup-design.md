@@ -289,6 +289,20 @@ alone. Some cleanings only make sense over the whole:
   opens with a topic word ("second thing", "also", "next", "okay so") and the formatter
   allows paragraphs, the join is a blank line rather than a space.
 - **Restatement corrections** that straddle a boundary.
+- **The seam's stop.** A piece ends at a pause of 0.8 s (0.4 s past fifteen seconds), which
+  `Docs/early-transcription.md` reads as a sentence ending, so every seam but a list item's
+  or a code line's ends as a sentence the way the place ends one: a full stop unless the
+  place's stop policy is `.never`, in which case a stop the recogniser wrote comes off.
+
+Some passes are only correct over the whole message, and their scope is in the type.
+`CleaningPipeline.piece(numbers:digits:steps:)` is what a piece gets — it takes no
+`FirstWordPolicy` and no `TerminalStopPolicy`, so it cannot decide the first word or the
+final stop — and a `TransformationRequest` says `scope: .piece` to ask for it. After the
+join, `TranscriptCleaning.finishMessage` runs `CleaningPipeline.message(for:situation:heard:)`
+(`FirstWordPass`, `TerminalStopPass`) once over the joined text. That is where the
+caret's lower-case start is applied to the message's first word only, and where
+`.offForShortMessages` counts the message's sentences rather than a piece's. The model is
+still called once per piece; the message stage is deterministic and calls nothing.
 
 `PieceJoiner` is one pure function over `[Draft]` and a formatter, tested on its own.
 
