@@ -1,34 +1,34 @@
-// Tells a view whether its window can be seen, so animations pause off screen.
+// Tells a view whether its window is the one being used, so animations stop when nobody is watching.
 
 import AppKit
 import SwiftUI
 
-/// Tells a view whether its window can be seen, from `NSWindow.occlusionState`. See Docs/app-main-window.md.
+/// Tells a view whether its window has somebody's attention, by `WindowAttention`. See Docs/app-main-window.md.
 extension View {
-    /// Calls `onChange` with whether this view's window is on screen, now and whenever it changes.
-    func onWindowVisibilityChange(_ onChange: @escaping (Bool) -> Void) -> some View {
-        background(WindowVisibilityReporter(onChange: onChange).allowsHitTesting(false))
+    /// Calls `onChange` with whether this view's window is the one being used, now and whenever it changes.
+    func onWindowAttentionChange(_ onChange: @escaping (Bool) -> Void) -> some View {
+        background(WindowAttentionReporter(onChange: onChange).allowsHitTesting(false))
     }
 }
 
 /// A zero-sized `NSView` whose only job is to have a `window`.
-private struct WindowVisibilityReporter: NSViewRepresentable {
+private struct WindowAttentionReporter: NSViewRepresentable {
     let onChange: (Bool) -> Void
 
     func makeNSView(context: Context) -> NSView {
-        let view = VisibilityReportingView()
+        let view = AttentionReportingView()
         view.onChange = onChange
         return view
     }
 
     func updateNSView(_ view: NSView, context: Context) {
-        (view as? VisibilityReportingView)?.onChange = onChange
+        (view as? AttentionReportingView)?.onChange = onChange
     }
 }
 
-private final class VisibilityReportingView: NSView {
+private final class AttentionReportingView: NSView {
     var onChange: ((Bool) -> Void)?
-    /// The last answer given, so repeated occlusion notices do not restart a running animation.
+    /// The last answer given, so repeated notices do not restart a running animation.
     private var lastReported: Bool?
 
     /// Subscribes here because a view has no window until it is placed in one.
@@ -37,13 +37,21 @@ private final class VisibilityReportingView: NSView {
         let centre = NotificationCenter.default
         centre.removeObserver(self)
         guard let window else {
-            report(true)
+            report(false)
             return
         }
-        centre.addObserver(
-            self, selector: #selector(recheck),
-            name: NSWindow.didChangeOcclusionStateNotification, object: window)
-        for name in [NSApplication.didHideNotification, NSApplication.didUnhideNotification] {
+        let windowNotices: [NSNotification.Name] = [
+            NSWindow.didChangeOcclusionStateNotification, NSWindow.didBecomeKeyNotification,
+            NSWindow.didResignKeyNotification,
+        ]
+        for name in windowNotices {
+            centre.addObserver(self, selector: #selector(recheck), name: name, object: window)
+        }
+        let applicationNotices: [NSNotification.Name] = [
+            NSApplication.didHideNotification, NSApplication.didUnhideNotification,
+            NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification,
+        ]
+        for name in applicationNotices {
             centre.addObserver(self, selector: #selector(recheck), name: name, object: nil)
         }
         recheck()
@@ -61,14 +69,19 @@ private final class VisibilityReportingView: NSView {
     }
 
     @objc private func recheck() {
-        guard let window else { return report(true) }
-        report(window.occlusionState.contains(.visible) && !NSApp.isHidden)
+        let attention = WindowAttention(
+            isShown: window != nil && !isHiddenOrHasHiddenAncestor,
+            isKey: window?.isKeyWindow ?? false,
+            isApplicationActive: NSApp.isActive,
+            isApplicationHidden: NSApp.isHidden,
+            isOnScreen: window?.occlusionState.contains(.visible) ?? false)
+        report(attention.animates)
     }
 
-    private func report(_ isVisible: Bool) {
-        guard lastReported != isVisible else { return }
-        lastReported = isVisible
-        onChange?(isVisible)
+    private func report(_ animates: Bool) {
+        guard lastReported != animates else { return }
+        lastReported = animates
+        onChange?(animates)
     }
 
     deinit { NotificationCenter.default.removeObserver(self) }

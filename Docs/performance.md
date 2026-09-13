@@ -230,10 +230,10 @@ sees.
 
 ### What is *not* fixed, stated plainly
 
-**With the window genuinely on screen and frontmost it still costs ~98% of a core.** The
-pause cannot help there — somebody is looking at it — and the underlying cost is untouched:
-one redraw of this card is 8 ms of processor time, which is an absurd price for a small
-card and is spent re-solving the whole window's layout rather than the card's.
+**This section describes the state before #359.** With the window on screen and frontmost it
+cost ~98% of a core. The pause could not help there, since somebody was looking at it, and one
+redraw of this card was 8 ms of processor time, spent re-solving the whole window's layout
+rather than the card's.
 
 Capping the frame rate was tried and measured, window frontmost:
 
@@ -288,27 +288,98 @@ the card, and a way to hold focus — none of which were available in the sessio
 this. The `sample`-based frame count above is the gate any attempt has to pass before its
 processor figure means anything.
 
-### What has since been done to it, and what that does not claim
+### What #288 changed, and why it was not the fix
 
-`ViewThatFits` is gone from the card. The arrangement is now chosen by
+`ViewThatFits` left the card: the arrangement is chosen by
 `ClipboardDemonstrationMetrics.arrangement(forOfferedWidth:)` from a width measured once by
-`onGeometryChange`, and only the drawing is left inside `TimelineView` — so a frame no
-longer proposes two candidate arrangements and asks each how big it would like to be. Both
-columns carry a resolved width and the stage a fixed height, so the animated subtree's size
-does not change between frames either.
+`onGeometryChange`. That was merged without the processor figure being re-taken, and on
+hardware the card still cost a core. The per-frame re-measurement of two arrangements was real
+but was not what the time went on. What the time went on was a redraw at the display's rate
+in windows nobody was using, which the sections below cover.
 
-**The processor cost was not re-measured.** The session that made this change had no way to
-run the bundle with a granted Accessibility permission, a window held frontmost and the card
-on screen, which is exactly what the gate above demands — so the 97.9% figure stands
-unchallenged in this document and no improvement on it is claimed here. What *is* established
-is that the per-frame re-measurement is no longer in the code, and that the card is not the
-frozen kind of cheap: the clock is a pure function
-(`ClipboardDemonstrationPhase.at(_:)`, tested over the whole eight-second loop), it is
-reached through an ordinary `switch` rather than a `ViewThatFits` candidate, and
-`ClipboardDemonstrationTests` fails if a `ViewThatFits` or a second `TimelineView` returns to
-the file.
+### Why that pause was not enough
 
-Anybody with the Mac to do it should run the three-step gate above and write the number here.
+The pause above stopped the card only when `NSWindow.occlusionState` lost `.visible`, and
+AppKit keeps `.visible` while any sliver of the window is on screen. The main window opens at
+launch and usually sits partly uncovered behind whatever the user is working in, so the card
+kept animating exactly where nobody was looking at it. Measured on the installed Release build
+of 0.5.0 on 13 September 2026, with the user's real history on the page (#359):
+
+| state | cost |
+|---|---|
+| window partly visible behind another app | 114–128% of a core |
+| another app brought frontmost, window still partly visible | 83–100% |
+| window fully covered | 0–1% |
+
+macOS filed `cpu_resource` reports for it. `sample` put about 2,200 of 3,230 main-thread
+samples in `NSHostingView.layout()`, under the card's drawing.
+
+### What the card does now
+
+Two changes, both in `Sources/Uttrflow/Main/`:
+
+- **It moves only in the window being used.** `WindowAttention` animates when the view is
+  shown, its window is key, the application is active and not hidden, and the window is on
+  screen. `WindowVisibility.swift` feeds it from the occlusion, key-window, active and hidden
+  notifications. Anywhere else the card rests on `ClipboardDemonstrationPhase.resting`, the
+  panel open with the address row chosen, so a glance at a background window still shows what
+  the feature is.
+- **Its clock wakes when the drawing changes, not on every display frame.**
+  `ClipboardDemonstrationMoments` is the card's `TimelineSchedule`. Of the eight-second loop,
+  only the panel rising (0.9 s) and going (0.6 s) move continuously, and those still get an
+  instant every 1/120 s. The typed line wakes once per character, and everything else is a
+  still state that wakes once, at its boundary. That is 228 wakes a loop instead of 960 at
+  120 Hz. `ClipboardDemonstrationMomentsTests` checks that the instant drawn matches what the
+  clock would show everywhere outside the moving stretches.
+
+### Measured, before and after
+
+Apple M5 Pro (Mac17,8), 48 GB, macOS 26.5.1 (25F80), built-in 120 Hz display. Both builds
+come from `make app-dev` (Release configuration), `origin/main` at a8e747b against this change.
+CPU is the per-second delta of the process's cumulative processor time, 30 samples per state.
+
+A development build has no Accessibility or microphone grant, and `HomePresentation` hides
+the card while a permission is missing, so both builds carried the same local-only harness,
+never committed: the card shown regardless of permissions, a clipboard shortcut filled in
+memory, launch reduced to opening Home, and the page scrolled to the bottom from inside the
+process so the card is on screen in its real place. With no permission the page has no
+figures or history list, so the window is lighter than a real one and the absolute figures
+are lower than #359's. The ratios are the point.
+
+| state | before (mean, range) | after (mean, range) |
+|---|---|---|
+| (a) window key and frontmost | 39.1% (28–61) | 11.3% (0–38) |
+| (b) window partly visible, another app frontmost | 37.4% (28–75) | 0.1% (0–1) |
+| (c) window fully covered | 0.0% (0–0) | 0.0% (0–1) |
+| (d) app hidden | 0.0% (0–1) | 0.0% (0–1) |
+
+The frontmost state was checked on each second's reading (key window, active application),
+and (b) with another application frontmost and the window uncovered on half its width. A second
+clean before-run of (a) read 37.7%. After the change, (a) is no longer flat: it reads 0–1% in
+the still stretches and 25–40% in the second that holds the panel's rise, repeating every
+eight seconds.
+
+**The card still animates.** `sample` over three seconds of (a) found 27 frames in
+`ClipboardDemonstration` after the change against 34 before, and 0 in (b), where it is meant
+to be still. That is the frame-count gate from the section above, and it is what separates
+this from the frozen kind of cheap.
+
+### Tried while fixing it, and not kept
+
+Each was measured with the card forced to animate, 30 seconds each, against the schedule
+without per-character typing at 12.6–18.8% across two runs:
+
+| attempt | cost |
+|---|---|
+| the document and panel in their own `NSHostingView`, so a frame cannot re-lay-out the window | 14.5% |
+| the panel's rise and fade as SwiftUI animations instead of clock ticks | 12.9% |
+| a constant shadow, with only the opacity animated | 13.8% |
+
+None is distinguishable from noise of about ±5 points, so none is in the code. Per-character
+typing is: over 64 seconds, back to back, it read 12.3% against 14.0% without it, in line
+with its 26% fewer wakes. What remains while animating is roughly proportional to the number
+of wakes, which is why the schedule is the lever and the frame rate during motion is not
+lowered.
 
 ## What is paid before anybody speaks
 

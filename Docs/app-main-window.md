@@ -44,4 +44,6 @@ stopped when the panel closed demonstrated a mechanism and left out the payoff.
   width in, arrangement out, and the clock only draws.
 - The animation is a pure function of the clock, so the page can redraw underneath it (on
   every keystroke in a search field) without the loop stuttering.
-- Paused when the window is not visible, which is where this card spends most of its life.
+- Moves only while its window is key in the active app, per `WindowAttention`; anywhere else it
+  rests on the panel open with the address row chosen. Its clock wakes only when the drawing
+  changes (`ClipboardDemonstrationMoments`). See `Docs/performance.md`.
