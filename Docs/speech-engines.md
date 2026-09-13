@@ -194,3 +194,27 @@ after a timeout the wait is short. After a cancelled dictation it is the rest of
 decode. Four overlapping decodes on one kit, two with a prompt and two without, returned
 the unprompted text for both prompted decodes in one round of three: the filters of one
 call had been replaced by another's.
+
+## Word timings behind a prompt
+
+- WhisperKit's `SegmentSeeker.addWordTimestamps` reads the decoder's alignment weights from row
+  zero, taking it as the start-of-transcript token. Behind a conditioning prompt that row is the
+  start-of-previous token, and the transcript's rows begin at `prompt.count + 1`, so every word is
+  aligned against the prompt instead (WhisperKit 1.1.0, `Core/Text/SegmentSeeker.swift`).
+- The misaligned timings are not only wrong, they lose words. `TranscribeTask` drops a segment
+  whose word timings collapse to zero length, and advances `seek` to the last segment's end, which
+  a bad alignment can place past audio never decoded. Sentences vanish from the start, the middle
+  or the end of the dictation, and the same audio with the same prompt loses the same ones.
+- Measured on synthetic speech from `say`, three voices, eight clips from 5 to 55 seconds, five
+  runs each with no prompt and with 5, 20 and 100 dictionary words: 45 of the 120 prompted
+  decodes lost at least one sentence, 215 sentences in all, and none of the unprompted ones did.
+  With the rows lined up, none of the 120 lost a sentence.
+- `PromptAlignedSegmentSeeker` hands WhisperKit's own seeker the weights from the transcript's
+  first row onward; `DecoderPrefill.transcriptStart` counts the offset from the same trimmed prompt
+  the timestamp rules are measured from, and an unprompted decode keeps WhisperKit's seeker. The
+  seeker lives on the kit like the filters, so the turn above is what keeps one call's offset from
+  reaching another's decode.
+- Still seen after the fix: with 100 words, one 53-second clip's first window came back as a
+  single segment with no inner timestamps, so the window ended at its fixed 30 seconds and the
+  four words spoken across that boundary were lost. That is the decoder's segmentation under a
+  long prompt, not the alignment.

@@ -169,7 +169,21 @@ private final class LoadedKit: @unchecked Sendable {
         )
         // Reassigned on every call, including to nothing, so a rule never outlives the prompt it was measured for.
         kit.textDecoder.logitsFilters = Self.rules(for: options, tokenizer: tokenizer)
+        // Reassigned with the rules, so word timings always read the rows this call's prompt left them.
+        kit.segmentSeeker = Self.seeker(for: options, tokenizer: tokenizer)
         return try await kit.transcribe(audioArray: samples, decodeOptions: options)
+    }
+
+    /// The segment seeker for this call, lined up past the prompt that precedes the transcript in the alignment weights.
+    private static func seeker(
+        for options: DecodingOptions, tokenizer: (any WhisperTokenizer)?
+    ) -> any SegmentSeeking {
+        guard let tokenizer else { return SegmentSeeker() }
+        return DecoderPrefill(
+            promptTokens: options.promptTokens,
+            specialTokenBegin: tokenizer.specialTokens.specialTokenBegin,
+            isMultilingual: !tokenizer.allLanguageTokens.isEmpty
+        ).segmentSeeker()
     }
 
     /// The timestamp rules a prompted decode loses, and nothing at all without a prompt, where WhisperKit's own still fire.
