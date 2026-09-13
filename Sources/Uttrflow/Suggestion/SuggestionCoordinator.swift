@@ -114,10 +114,8 @@ final class SuggestionCoordinator {
             sink: store,
             preferencesFile: CapturePreferencesFile(
                 path: CapturePreferencesFile.defaultFile(in: container).path(percentEncoded: false)),
-            // A shell line that was not run was not a command, so a terminal learns only what Return finished.
-            policy: CommitPolicy { reason, reading in
-                !TerminalApplications.contains(reading.bundleIdentifier) || reason == .returnPressed
-            })
+            // A line that was never sent was not a value: a shell and a chat composer learn on Return alone.
+            policy: .whereReturnSends)
         acceptor = SuggestionAcceptor(completion: TextInsertion.completion())
     }
 
