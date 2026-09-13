@@ -26,8 +26,14 @@ prints the classes that grew most between the first sample and the last, with th
 the live node count beside them.
 
 **A count that only ever rises is the answer.** One class climbing while everything else moves
-about is the chain; that class is one end of it, and `ActivationMonitor` and `SystemKeyboard` are
-the other, since their deinits are what recurse.
+about is the chain; that class is one end of it, and whatever frees the head of it is the other.
+
+A chain need not be a class `heap` can name. The one behind #140, found in #340, was closure
+contexts: `SystemKeyboard` kept its sink as a bare closure in a `Mutex`, and reading a closure out
+through `withLock`'s `inout` re-wraps it in reabstraction thunks and writes the wrapper back, so
+every keystroke added a layer. Delivering a stroke called through every layer and stopping the
+keyboard freed them recursively. The sink is now a struct holding the closure, and
+`SystemKeyboardDeliveryTests` measures the stack depth of both paths, which a soak cannot.
 
 ## What it cannot tell you
 

@@ -63,9 +63,14 @@ public final class SystemKeyboard: KeyboardEventSource {
     }
 }
 
-/// Holds the sink across the C callback boundary, the port to revive, and the lock guarding both.
-private final class Delivery: @unchecked Sendable {
-    private let sink = Mutex<(@Sendable (KeyStroke) -> Void)?>(nil)
+/// Holds the sink across the C callback boundary and the port to revive; internal so tests can drive it.
+final class Delivery: @unchecked Sendable {
+    /// The closure in a struct, since a bare closure read out of a `Mutex` is re-wrapped and written back.
+    private struct Sink: Sendable {
+        let call: @Sendable (KeyStroke) -> Void
+    }
+
+    private let sink = Mutex<Sink?>(nil)
     /// How many disables have counted against the tap inside the current window.
     private let disables = Atomic<Int>(0)
     /// When the last disable arrived, so two close together read as one fault.
@@ -79,8 +84,8 @@ private final class Delivery: @unchecked Sendable {
         }
     }
 
-    func set(_ value: (@Sendable (KeyStroke) -> Void)?) { sink.withLock { $0 = value } }
-    func send(_ stroke: KeyStroke) { sink.withLock { $0 }?(stroke) }
+    func set(_ value: (@Sendable (KeyStroke) -> Void)?) { sink.withLock { $0 = value.map(Sink.init) } }
+    func send(_ stroke: KeyStroke) { sink.withLock { $0 }?.call(stroke) }
 
     /// Keeps the port the callback re-enables; the tap exists only after its own callback is written.
     func adopt(_ port: CFMachPort) {
