@@ -40,6 +40,17 @@ struct DoubtfulWordsTests {
         #expect(merged == ["Apple", "apples"])
     }
 
+    /// Asked first, the dictionary's copy of a spelling is the one kept, so the screen repeating it cannot strip its entry.
+    @Test("keeps the first source's reading of a spelling two sources offer, entry and all")
+    func mergesKeepingTheEntry() {
+        let entry = UUID()
+        let merged = DoubtfulWords.merged(
+            [[Reading("PaymentSheet", entryID: entry)], ["PaymentSheet", "paymentSheet"]],
+            heard: "payment sheet")
+
+        #expect(merged == [Reading("PaymentSheet", entryID: entry)])
+    }
+
     @Test("offers the longest doubtful run and drops the runs inside it")
     func prefersTheLongestRun() async {
         let sources = [ScriptedCandidates(["payment sheet": ["PaymentSheet"], "sheet": ["Sheet"]])]

@@ -14,10 +14,10 @@ public struct DictionaryCandidates: CandidateSource {
     }
 
     /// What the correction engine's lookup recalls, capped; `ReadingRestraint` is not asked, because a taught word is evidence.
-    public func candidates(for word: Draft.Word, in situation: Situation) async -> [String] {
+    public func candidates(for word: Draft.Word, in situation: Situation) async -> [Reading] {
         Array(
             WordCorrectionEngine.spellings(of: word.text, in: await index())
-                .map(\.word)
+                .map { Reading($0.word, entryID: $0.id) }
                 .prefix(Self.maximumOffered))
     }
 }

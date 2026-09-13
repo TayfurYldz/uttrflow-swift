@@ -330,6 +330,44 @@ struct GenerativeTextTransformerTests {
         _ = try await sut.transform(request("the crash is in payment sheet"))
         #expect(model.calls.first?.text.contains(PromptBuilder.doubtfulLabel) == false)
     }
+
+    // MARK: Which entry a taken reading came from
+
+    /// The same transformer with the user's dictionary asked first, as the app builds it.
+    private func taught(rewriting answer: String) -> GenerativeTextTransformer {
+        GenerativeTextTransformer(
+            kind: .foundationModels, model: FakeCleanupModel { _ in answer },
+            doubtful: .including(dictionary: { CorrectionFixtures.index }))
+    }
+
+    /// Issue 219: without the entry, a spelling reaching the user by this path was never counted and could never retire.
+    @Test("names the dictionary entry whose spelling the model wrote for a doubtful run")
+    func namesTheEntryTaken() async throws {
+        let entry = try #require(CorrectionFixtures.entries.first { $0.word == "PaymentSheet" })
+
+        let result = try await taught(rewriting: "The crash is in PaymentSheet").transform(doubtfulRequest())
+
+        #expect(result.entriesTaken == [entry.id])
+    }
+
+    @Test("names no entry when the model kept the words as they were heard")
+    func namesNoEntryForTheWordsAsHeard() async throws {
+        let result = try await taught(rewriting: "The crash is in payment sheet").transform(doubtfulRequest())
+
+        #expect(result.entriesTaken.isEmpty)
+    }
+
+    /// The screen offers the same spelling without the dictionary, and nobody taught it, so nothing is counted.
+    @Test("names no entry for a reading nobody taught")
+    func namesNoEntryForTheScreensReading() async throws {
+        let model = FakeCleanupModel { _ in "The crash is in PaymentSheet" }
+        let sut = GenerativeTextTransformer(kind: .foundationModels, model: model)
+
+        let result = try await sut.transform(doubtfulRequest())
+
+        #expect(result.text == "The crash is in PaymentSheet")
+        #expect(result.entriesTaken.isEmpty)
+    }
 }
 
 /// The floor transformer.

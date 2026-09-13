@@ -1,19 +1,38 @@
+public import struct Foundation.UUID
 public import UttrflowCore
 public import UttrflowDictionary
+
+/// One other spelling of a doubtful run, and the dictionary entry it came from when it came from one.
+public struct Reading: Sendable, Hashable, ExpressibleByStringLiteral {
+    /// The words as they would be written.
+    public let spelling: String
+    /// The entry that taught this spelling, so a reading the model takes is counted like a correction; `nil` off the screen or the vocabulary.
+    public let entryID: UUID?
+
+    public init(_ spelling: String, entryID: UUID? = nil) {
+        self.spelling = spelling
+        self.entryID = entryID
+    }
+
+    /// A reading nobody taught, which is what a literal in a test or a fixture is.
+    public init(stringLiteral spelling: String) {
+        self.init(spelling)
+    }
+}
 
 /// Where another reading of a doubtful word can come from. See `Docs/cleanup-design.md` §5.
 public protocol CandidateSource: Sendable {
     /// The readings this source offers for one run of doubtful words, best first, in single-digit milliseconds.
-    func candidates(for word: Draft.Word, in situation: Situation) async -> [String]
+    func candidates(for word: Draft.Word, in situation: Situation) async -> [Reading]
 
     /// The readings for every run of one piece, so what a source derives from the screen is derived once.
-    func candidates(for words: [Draft.Word], in situation: Situation) async -> [[String]]
+    func candidates(for words: [Draft.Word], in situation: Situation) async -> [[Reading]]
 }
 
 extension CandidateSource {
     /// One run at a time, which is right for a source whose index does not depend on the situation.
-    public func candidates(for words: [Draft.Word], in situation: Situation) async -> [[String]] {
-        var found: [[String]] = []
+    public func candidates(for words: [Draft.Word], in situation: Situation) async -> [[Reading]] {
+        var found: [[Reading]] = []
         for word in words { found.append(await candidates(for: word, in: situation)) }
         return found
     }
@@ -25,10 +44,10 @@ public struct DoubtfulSpan: Sendable, Equatable {
     public let heard: String
     /// The lowest confidence in the run, because a run is only as certain as its weakest word.
     public let confidence: Double
-    /// The other readings, best first; a span with none is never offered to the model.
-    public let candidates: [String]
+    /// The other readings, best first, each still carrying where it came from; a span with none is never offered to the model.
+    public let candidates: [Reading]
 
-    public init(heard: String, confidence: Double, candidates: [String]) {
+    public init(heard: String, confidence: Double, candidates: [Reading]) {
         self.heard = heard
         self.confidence = confidence
         self.candidates = candidates
@@ -87,9 +106,9 @@ public struct DoubtfulWords: Sendable {
     }
 
     /// Every source's answer for every run, the sources running beside each other because they share nothing.
-    private func readings(for words: [Draft.Word], in situation: Situation) async -> [[String]] {
-        var answers: [[[String]]] = Array(repeating: [], count: sources.count)
-        await withTaskGroup(of: (Int, [[String]]).self) { group in
+    private func readings(for words: [Draft.Word], in situation: Situation) async -> [[Reading]] {
+        var answers: [[[Reading]]] = Array(repeating: [], count: sources.count)
+        await withTaskGroup(of: (Int, [[Reading]]).self) { group in
             for (position, source) in sources.enumerated() {
                 group.addTask { (position, await source.candidates(for: words, in: situation)) }
             }
@@ -99,9 +118,13 @@ public struct DoubtfulWords: Sendable {
     }
 
     /// The sources' readings in the order they were asked, each once, and never the words as they were heard.
-    static func merged(_ answers: [[String]], heard: String) -> [String] {
+    static func merged(_ answers: [[Reading]], heard: String) -> [Reading] {
         var seen: Set<String> = []
+        // The first to offer a spelling keeps it, which is the dictionary's, so a taught word keeps its entry.
         return answers.flatMap { $0 }
-            .filter { $0 != heard && !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+            .filter {
+                $0.spelling != heard && !$0.spelling.isEmpty
+                    && seen.insert($0.spelling.lowercased()).inserted
+            }
     }
 }

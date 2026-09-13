@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import UttrflowAI
@@ -484,6 +485,59 @@ struct GrammarGuardTests {
         #expect(
             sut.verdict(draft: draft("i ate an apple"), rewritten: "I ate an apple.", offering: offered)
                 .isAccepted)
+    }
+
+    /// What the transformer reports so the entry behind a taken reading is counted, read off the alignment the verdict used.
+    @Test("names the reading written where a doubtful run stood, with the entry it came from")
+    func namesTheReadingTaken() {
+        let entry = UUID()
+        let offered = [
+            DoubtfulSpan(
+                heard: "payment sheet", confidence: 0.3,
+                candidates: ["Payments", Reading("PaymentSheet", entryID: entry)])
+        ]
+
+        let taken = sut.readingsTaken(
+            draft: draft("the crash is in payment sheet"),
+            rewritten: "The crash is in PaymentSheet.", offering: offered)
+
+        #expect(taken == [Reading("PaymentSheet", entryID: entry)])
+    }
+
+    @Test("names no reading where the run was written as it was heard, or where none was offered")
+    func namesNoReadingForTheHeardWords() {
+        let offered = [
+            DoubtfulSpan(
+                heard: "payment sheet", confidence: 0.3,
+                candidates: [Reading("PaymentSheet", entryID: UUID())])
+        ]
+
+        #expect(
+            sut.readingsTaken(
+                draft: draft("the crash is in payment sheet"),
+                rewritten: "The crash is in payment sheet.", offering: offered
+            ).isEmpty)
+        #expect(
+            sut.readingsTaken(
+                draft: draft("the crash is in payment sheet"),
+                rewritten: "The crash is in PaymentSheet.", offering: []
+            ).isEmpty)
+    }
+
+    /// A sentence capitalises its first word whatever was offered, so a capital alone is not read as the model's choice.
+    @Test("names no reading that differs from the words as heard only in its capitals")
+    func namesNoReadingForCapitalsAlone() {
+        let offered = [
+            DoubtfulSpan(heard: "claude", confidence: 0.3, candidates: [Reading("Claude", entryID: UUID())])
+        ]
+
+        #expect(
+            sut.readingsTaken(draft: draft("ask claude"), rewritten: "Ask Claude.", offering: offered)
+                .isEmpty)
+        #expect(
+            sut.readingsTaken(
+                draft: draft("um claude said so"), rewritten: "Claude said so.", offering: offered
+            ).isEmpty)
     }
 
     @Test("accepts a spoken run written closed up as the identifier it was offered")

@@ -8,7 +8,7 @@ public struct PhoneticCandidates: CandidateSource {
 
     public init() {}
 
-    public func candidates(for word: Draft.Word, in situation: Situation) async -> [String] {
-        Array(GeneralVocabulary.wordsSounding(like: word.text).prefix(Self.maximumOffered))
+    public func candidates(for word: Draft.Word, in situation: Situation) async -> [Reading] {
+        GeneralVocabulary.wordsSounding(like: word.text).prefix(Self.maximumOffered).map { Reading($0) }
     }
 }

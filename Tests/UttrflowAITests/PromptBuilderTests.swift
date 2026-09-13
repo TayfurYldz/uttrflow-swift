@@ -147,7 +147,7 @@ struct PromptBuilderTests {
     @Test("lists no more runs than the cap, however many were doubted")
     func doubtfulLineIsCapped() {
         let spans = (1...8).map {
-            DoubtfulSpan(heard: "word\($0)", confidence: 0.3, candidates: ["Word\($0)"])
+            DoubtfulSpan(heard: "word\($0)", confidence: 0.3, candidates: [Reading("Word\($0)")])
         }
         let listed = PromptBuilder.doubtfulText(spans) ?? ""
         #expect(listed.components(separatedBy: "could be").count - 1 == DoubtfulWords.maximumSpans)

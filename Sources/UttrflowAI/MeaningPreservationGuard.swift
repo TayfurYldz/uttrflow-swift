@@ -51,12 +51,22 @@ public struct MeaningPreservationGuard: Sendable {
             alignment, excusing: readings.excused, echoed: echoed, allowing: doubtful)
     }
 
+    /// The readings the rewrite wrote where a doubtful run stood, so the entries that taught them are counted used.
+    public func readingsTaken(
+        draft: Draft, rewritten: String, offering doubtful: [DoubtfulSpan]
+    ) -> [Reading] {
+        guard !doubtful.isEmpty else { return [] }
+        return Self.readingVerdict(doubtful, in: RewriteAlignment(kept: draft.text, rewritten: rewritten))
+            .taken
+    }
+
     /// A doubtful run may be written where it stands as it was heard or as a reading offered for it, inflected or not, and as nothing else.
     static func readingVerdict(
         _ doubtful: [DoubtfulSpan], in alignment: RewriteAlignment
-    ) -> (verdict: GuardVerdict, excused: Set<Int>) {
+    ) -> (verdict: GuardVerdict, excused: Set<Int>, taken: [Reading]) {
         var excused: Set<Int> = []
-        guard !doubtful.isEmpty else { return (.accepted, excused) }
+        var taken: [Reading] = []
+        guard !doubtful.isEmpty else { return (.accepted, excused, taken) }
         for span in doubtful {
             for place in alignment.keptRuns(spelled: DoubtfulSpan.closedUp(span.heard)) {
                 let touched = alignment.changes.filter { $0.kept.overlaps(place) }
@@ -68,21 +78,41 @@ public struct MeaningPreservationGuard: Sendable {
                 let before = alignment.keptSpelling(of: start..<place.lowerBound)
                 let after = alignment.keptSpelling(of: place.upperBound..<end)
                 // The rewrite may inflect the run it was given — "payment sheets" for "payment sheet" — and change it no further.
-                let offered = ([span.heard] + span.candidates).flatMap { reading in
+                func writes(_ reading: String) -> Bool {
                     let wanted = DoubtfulSpan.closedUp(reading)
                     return inflections(of: wanted).union([wanted]).map { before + $0 + after }
+                        .contains(alignment.standing(in: start..<end))
                 }
-                guard offered.contains(alignment.standing(in: start..<end)) else {
+                let offered = span.candidates.filter { writes($0.spelling) }
+                guard writes(span.heard) || !offered.isEmpty else {
                     return (
                         .rejected(reason: "the rewrite read '\(span.heard)' as a word it was not offered"),
-                        excused
+                        excused, taken
                     )
+                }
+                if let reading = Self.reading(
+                    among: offered, heard: span.heard, standing: alignment.standingAsWritten(in: start..<end))
+                {
+                    taken.append(reading)
                 }
                 // A reading rightly written here is the one substitution the survival check must let past.
                 for change in touched { excused.formUnion(change.kept.clamped(to: place)) }
             }
         }
-        return (.accepted, excused)
+        return (.accepted, excused, taken)
+    }
+
+    /// The offered reading written in the run's place, told from the heard words by its capitals and spaces when it closes up alike.
+    private static func reading(
+        among offered: [Reading], heard: String, standing written: String
+    ) -> Reading? {
+        let asHeard = RewriteAlignment.asWritten(heard)
+        return offered.first { reading in
+            let spelled = RewriteAlignment.asWritten(reading.spelling)
+            // Capitals alone are what a sentence gives its first word, so they are no sign the model chose the reading.
+            guard spelled.lowercased() != asHeard.lowercased() else { return false }
+            return written.contains(spelled)
+        }
     }
 
     /// The same judgement over two texts, which is how a test states one.
@@ -290,7 +320,7 @@ public struct MeaningPreservationGuard: Sendable {
         let readings = Set(
             doubtful
                 .flatMap { $0.candidates }
-                .flatMap { $0.split(whereSeparator: \.isWhitespace) }
+                .flatMap { $0.spelling.split(whereSeparator: \.isWhitespace) }
                 .map { DoubtfulSpan.closedUp(String($0)) })
         for token in rewritten
         where token.isPlain && isContent(token) && !readings.contains(DoubtfulSpan.closedUp(token.text)) {
