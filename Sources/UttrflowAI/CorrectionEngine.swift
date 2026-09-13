@@ -53,13 +53,25 @@ public struct WordCorrectionEngine: Sendable {
         // Candidates arrive in the index's usefulness order, so the first that earns its place is offered.
         for entry in candidates {
             // Condition 3.
-            guard let reason = evidence.decisiveReason(preferring: entry.word, over: span.text)
+            guard Self.spells(entry, asHeard: span.text),
+                let reason = evidence.decisiveReason(preferring: entry.word, over: span.text)
             else { continue }
             return WordCorrection(
                 heard: span.text, replacement: entry.word, wordRange: span.range,
                 entryID: entry.id, reason: reason, heardConfidence: span.confidence)
         }
         return nil
+    }
+
+    /// Whether an entry may take a run of several words: it must spell them, or at least open as they do.
+    static func spells(_ entry: DictionaryEntry, asHeard heard: String) -> Bool {
+        // One word for one word is the ordinary case, and the evidence alone decides it.
+        guard heard.split(whereSeparator: \.isWhitespace).count > 1 else { return true }
+        // Either the spelling or the pronunciation the user wrote for it, which is what that field is for.
+        return [entry.word, entry.soundsLike].contains {
+            ReadingRestraint.closedUp($0) == ReadingRestraint.closedUp(heard)
+                || ReadingRestraint.opensAlike($0, heard: heard)
+        }
     }
 
     /// The proposals that fit together, taken greedily from the deserving order the input arrives in.

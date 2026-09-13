@@ -1,4 +1,5 @@
 import Testing
+import UttrflowCore
 
 @testable import UttrflowAI
 
@@ -40,6 +41,18 @@ struct CorrectionRestraintTests {
         "The clod of earth broke apart in his hand",
     ]
 
+    /// The same temptations at a length where the blast-radius cap allows two changes, not one.
+    static let alreadyCorrectAtLength = [
+        "Anodised aluminium resists the salt air well enough for the coast in winter",
+        "The bear clawed the bark off a young tree beside the river last spring",
+        "She wrote a sonnet about the harbour at dawn and read it to nobody",
+        "The maven of modern architecture spoke first and the room went quiet afterwards",
+        "He moored the sloop against the old quay before the weather turned that evening",
+        "A kestrel hovered above the motorway verge for a while and then dropped away",
+        "The paediatrician recommended a second opinion before we agreed to anything at all",
+        "Idempotent retries prevent duplicate charges when the network drops midway through a payment",
+    ]
+
     @Test(
         "changes nothing in a correct sentence, however badly it was heard",
         arguments: alreadyCorrect)
@@ -67,6 +80,40 @@ struct CorrectionRestraintTests {
             for: CorrectionFixtures.doubting(sentence),
             against: CorrectionFixtures.index,
             seeing: CorrectionFixtures.showingEverything)
+        #expect(proposals.isEmpty, "\(sentence) → \(proposals.map(\.replacement))")
+    }
+
+    /// The evidence margin, not the blast-radius cap: at this length the cap allows the change.
+    @Test(
+        "changes nothing in a longer correct sentence, with the whole dictionary on screen",
+        arguments: alreadyCorrectAtLength)
+    func leavesLongerSentencesAlone(sentence: String) {
+        let proposals = engine.proposals(
+            for: CorrectionFixtures.doubting(sentence),
+            against: CorrectionFixtures.index,
+            seeing: CorrectionFixtures.showingEverything)
+        #expect(proposals.isEmpty, "\(sentence) → \(proposals.map(\.replacement))")
+    }
+
+    /// Without this the test above measures the cap again, which the short corpus already measures.
+    @Test("the longer sentences really do allow more than one change")
+    func longerSentencesHaveABudgetAboveOne() {
+        for sentence in Self.alreadyCorrectAtLength {
+            let words = CorrectionFixtures.doubting(sentence).words.count
+            #expect(
+                WordCorrectionEngine.budget(for: words) >= 2,
+                "\(sentence) is \(words) words, so the cap still allows only one change")
+        }
+    }
+
+    /// The application in front is not evidence for a spelling, which is the learner's rule too.
+    @Test("does not take the application's own name as a sighting")
+    func theApplicationNameIsNotEvidence() {
+        let sentence = "Anodised aluminium resists the salt air well enough for the coast in winter"
+        let proposals = engine.proposals(
+            for: CorrectionFixtures.doubting(sentence),
+            against: CorrectionFixtures.index,
+            seeing: AppContext(applicationName: CorrectionFixtures.words.joined(separator: " ")))
         #expect(proposals.isEmpty, "\(sentence) → \(proposals.map(\.replacement))")
     }
 

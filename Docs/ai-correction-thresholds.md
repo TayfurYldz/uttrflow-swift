@@ -34,6 +34,21 @@ recogniser visibly came apart (a word split, a word spelt out) and something in 
 situation names the word it came apart into. Integers, because the signals are counts of
 independent facts.
 
+**The margin alone does not hold a run of several words**, which was measured rather than
+argued. Every sentence in the restraint corpus used to be short enough that
+`budget(for:)` was one, so a two-word proposal was discarded by the blast-radius cap and the
+three restraint tests were measuring that cap rather than this margin. Padded to twelve
+words, where the cap allows two changes, the same corpus produced "the salt **URL** enough
+for the coast" and "read **Aditi** nobody": the entry is on screen and the run is several
+words becoming one, which is two signals, which clears a margin of two.
+
+So a run of several words has a condition of its own before the evidence is counted at all:
+the entry must spell the run closed up, or open as it does — `ReadingRestraint`'s rule, which
+the readings offered to the model have always been held to and the dictionary's own
+corrections never were. "payment sheet" to `PaymentSheet` and "utter flow" to `Uttrflow` pass
+it; "air well" to `URL` does not. An entry's pronunciation counts as well as its spelling, so
+a user who writes "cube cuttle" against `Kubectl` gets that run back.
+
 ## `maximumChangedInEvery = 5`, with a floor of one
 
 An engine that wants to change a third of an utterance has misread it, so the whole
