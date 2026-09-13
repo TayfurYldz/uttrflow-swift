@@ -85,6 +85,27 @@ held modifier or Fn at all.
 So delivery is a property of the shortcut: most are **observed** through the tap, and one is
 **claimed** through Carbon.
 
+## Re-registering a claimed shortcut
+
+Carbon refuses a combination this process already holds, with `-9878`
+(`eventHotKeyExistsErr`), and does not refuse one another process holds. Measured from a test
+process: registering ⇧⌘V twice answers `0` then `-9878`, and `0` again once the first is
+unregistered. A refused registration is not consumed, so the key reaches the frontmost app —
+for ⇧⌘V, a paste without formatting.
+
+Every change to the shortcuts, and every activation while one is unarmed, stops all the
+claimed monitors and registers them again. On the main thread `stop()` unregisters before it
+returns, so that sequence cannot collide with itself. Off the main thread `stop()` takes the
+registration out at once and queues the Carbon call for the main thread; the next
+registration runs that queue before it registers. Without the queue, a rebind that ran before
+the hop was refused with `-9878`, and the hop then removed the old registration too, leaving
+the key held by nobody. `CarbonHotkeyLifecycleTests` drives both orders through the real
+monitor.
+
+Whether a registration that succeeded is delivered is a window-server question no test here
+can answer: a key event posted from a test process did not fire a Carbon hot key even with a
+single registrant, so delivery is checked by pressing the key on a real build.
+
 ## What a shortcut is for
 
 `ShortcutSet` holds every binding by `ShortcutAction`, and is what `Settings` stores. A file
