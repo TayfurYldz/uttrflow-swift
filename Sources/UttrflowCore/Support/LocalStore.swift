@@ -27,8 +27,10 @@ public enum LocalStore {
         directory.appending(path: "\(folder)/\(name)", directoryHint: .notDirectory)
     }
 
-    /// One of this build's directories inside `directory`.
-    public static func directory(_ name: String, in directory: URL) -> URL {
-        directory.appending(path: "\(folder)/\(name)", directoryHint: .isDirectory)
+    /// One of this build's directories inside `directory`, or another build's when an identifier is named.
+    public static func directory(
+        _ name: String, in directory: URL, for identifier: String? = Bundle.main.bundleIdentifier
+    ) -> URL {
+        directory.appending(path: "\(folder(for: identifier))/\(name)", directoryHint: .isDirectory)
     }
 }
