@@ -927,4 +927,20 @@ struct GuardMatchStrengthTests {
                 "we", "can", "not", "now",
             ])
     }
+
+    // MARK: - How many sentences the allowance is for
+
+    /// The allowance is three function-word edits a sentence, so a miscount is a licence.
+    @Test(
+        "counts a word carrying a stop inside itself as ending no sentence",
+        arguments: [
+            ("Call me at 5 p.m. tomorrow.", 1), ("We use JSON, e.g. for the config.", 1),
+            ("Ship it.", 1), ("One. Two. Three.", 3), ("No mark at all", 1),
+            // A title is not an interior stop, and this rule says nothing about one.
+            ("Dr. Chen is here.", 2),
+        ]
+    )
+    func countsSentences(text: String, expected: Int) {
+        #expect(MeaningPreservationGuard.sentenceCount(text) == expected)
+    }
 }
