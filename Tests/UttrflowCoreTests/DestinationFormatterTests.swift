@@ -26,7 +26,7 @@ struct DestinationFormatterTests {
                 .asSpoken, .fromTen
             ),
             (.email, .fromInsertionPoint, .always, [.paragraphs, .lists], .repair, .fromTen),
-            (.plain, .fromInsertionPoint, .always, .paragraphs, .repair, .fromTen),
+            (.plain, .fromInsertionPoint, .always, [.paragraphs, .lists], .repair, .fromTen),
         ]
 
     @Test(

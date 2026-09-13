@@ -695,6 +695,48 @@ struct LayoutGuardTests {
             ).isAccepted)
     }
 
+    /// Tier 3: a list may be laid out, never composed. See `Docs/cleanup.md`.
+    @Test("refuses a list the model composed where the destination lays none out")
+    func refusesAComposedList() {
+        let verdict = MeaningPreservationGuard.layoutVerdict(
+            kept: "the build is green the tests pass we can ship",
+            rewritten: "- The build is green\n- The tests pass\n- We can ship",
+            layout: .paragraphs)
+        #expect(verdict.isAccepted == false)
+    }
+
+    @Test("allows the same list where the destination does lay lists out")
+    func allowsAListWhereTheyBelong() {
+        #expect(
+            MeaningPreservationGuard.layoutVerdict(
+                kept: "the build is green the tests pass we can ship",
+                rewritten: "- The build is green\n- The tests pass\n- We can ship",
+                layout: [.paragraphs, .lists]
+            ).isAccepted)
+    }
+
+    /// A list the speaker spoke is laid out by the passes before the model sees it, so it is in the draft.
+    @Test("allows a list that was already in the draft")
+    func allowsAListTheSpeakerSpoke() {
+        #expect(
+            MeaningPreservationGuard.layoutVerdict(
+                kept: "\n- fix the build\n- review the PR",
+                rewritten: "\n- Fix the build\n- Review the PR",
+                layout: .paragraphs
+            ).isAccepted)
+    }
+
+    /// Somewhere with no paragraphs to make — a cell — a break is the model's shape, not the speaker's.
+    @Test("refuses a break added where there are no paragraphs to add one to")
+    func refusesABreakWithNoParagraphs() {
+        #expect(
+            MeaningPreservationGuard.layoutVerdict(
+                kept: "total revenue for the quarter",
+                rewritten: "Total revenue\nfor the quarter",
+                layout: .singleLine
+            ).isAccepted == false)
+    }
+
     @Test("allows a rewrite that added a break, which the formatter's own passes settle")
     func allowsAddedBreak() {
         #expect(

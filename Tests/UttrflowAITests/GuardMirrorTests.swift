@@ -33,6 +33,10 @@ struct GuardMirrorTests {
             "an added break is the passes' to settle, per Docs/cleanup-design.md:272",
         "the rewrite changed":
             "the churn allowance is set by the produced side, which PLAN.md records as a corpus measurement still owed",
+        "the rewrite composed a list the speaker did not speak":
+            "a list taken away is a dropped break, which the check above already refuses; composing one is the arm Tier 3 names",
+        "the rewrite added a line break the speaker did not ask for":
+            "the mirror of this is the dropped-break refusal above, and both are asked of the destination's layout rather than of the text alone",
     ]
 
     /// The reason the guard gives, or nil where it accepted.

@@ -103,8 +103,8 @@ public struct DestinationFormatter: Sendable, Equatable {
             layout: [.paragraphs, .lists], grammar: .repair, numbers: .fromTen,
             promptBlock: "email"),
         .plain: DestinationFormatter(
-            destination: .plain, firstWord: .fromInsertionPoint, terminalStop: .always, layout: .paragraphs,
-            grammar: .repair, numbers: .fromTen, promptBlock: "plain"),
+            destination: .plain, firstWord: .fromInsertionPoint, terminalStop: .always,
+            layout: [.paragraphs, .lists], grammar: .repair, numbers: .fromTen, promptBlock: "plain"),
     ]
 
     /// The formatter for a destination, falling back to plain text's for one the registry lacks.
