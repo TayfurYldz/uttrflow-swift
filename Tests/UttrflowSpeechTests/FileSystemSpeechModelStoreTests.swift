@@ -13,6 +13,25 @@ private func writeTokenizer(into destination: URL) throws {
     }
 }
 
+/// The compiled bundles a WhisperKit model directory holds, written as the files the store checks for.
+private let weightFiles = [
+    "MelSpectrogram.mlmodelc/coremldata.bin", "MelSpectrogram.mlmodelc/weights/weight.bin",
+    "AudioEncoder.mlmodelc/coremldata.bin", "AudioEncoder.mlmodelc/weights/weight.bin",
+    "TextDecoder.mlmodelc/coremldata.bin", "TextDecoder.mlmodelc/weights/weight.bin",
+]
+
+/// Writes the listed weight files under `destination`, `bytesEach` bytes apiece.
+private func writeWeights(
+    into destination: URL, files: [String] = weightFiles, bytesEach: Int = 16
+) throws {
+    for name in files {
+        let url = destination.appending(path: name)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(repeating: 7, count: bytesEach).write(to: url)
+    }
+}
+
 /// The bytes ``writeTokenizer(into:)`` adds to a model's directory.
 private let tokenizerBytes = Int64(TokenizerAssets.fileNames.count)
 
@@ -30,17 +49,13 @@ struct FileSystemSpeechModelStoreTests {
 
     /// A downloader that writes a plausible install with progress, and a one-byte-per-file tokenizer.
     private func writingDownloader(
-        fileCount: Int = 2, bytesEach: Int = 16, progressSteps: [Double] = [0.5]
+        bytesEach: Int = 16, progressSteps: [Double] = [0.5]
     ) -> FileSystemSpeechModelStore.Downloader {
         { _, component, destination, onProgress in
             switch component {
             case .weights:
                 for step in progressSteps { onProgress(step) }
-                for index in 0..<fileCount {
-                    try Data(repeating: 7, count: bytesEach).write(
-                        to: destination.appending(path: "part-\(index).bin")
-                    )
-                }
+                try writeWeights(into: destination, bytesEach: bytesEach)
             case .tokenizer:
                 try writeTokenizer(into: destination)
             }
@@ -75,7 +90,7 @@ struct FileSystemSpeechModelStoreTests {
         #expect(url == store.location(of: .base))
         #expect(store.isInstalled(.base))
         #expect(store.installedModels() == [.base])
-        #expect(store.bytesOnDisk(.base) == 32 + tokenizerBytes)
+        #expect(store.bytesOnDisk(.base) == Int64(weightFiles.count * 16) + tokenizerBytes)
     }
 
     @Test("reports progress and always finishes at one")
@@ -154,7 +169,7 @@ struct FileSystemSpeechModelStoreTests {
         await #expect(throws: SpeechEngineError.self) { try await store.install(.base) { _ in } }
 
         let folder = store.location(of: .base)
-        #expect(FileManager.default.fileExists(atPath: folder.appending(path: "part-0.bin").path))
+        #expect(FileManager.default.fileExists(atPath: folder.appending(path: weightFiles[1]).path))
         #expect(!TokenizerAssets.arePresent(in: folder), "half a tokenizer is not a tokenizer")
         #expect(!store.isInstalled(.base))
     }
@@ -175,6 +190,145 @@ struct FileSystemSpeechModelStoreTests {
         #expect(!store.isInstalled(.base))
     }
 
+    /// A bundle missing from the directory cannot load, however many other files sit beside it.
+    @Test("does not call a model installed when one of its weight files is missing", arguments: weightFiles)
+    func missingWeightFileIsNotInstalled(missing: String) throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        let folder = store.location(of: .base)
+        try writeWeights(into: folder, files: weightFiles.filter { $0 != missing })
+        try writeTokenizer(into: folder)
+
+        #expect(!store.isInstalled(.base))
+        #expect(store.bytesOnDisk(.base) == nil)
+    }
+
+    /// A weight file that exists but holds nothing is what a write cut off at its start leaves.
+    @Test("does not call a model installed when a weight file is empty")
+    func emptyWeightFileIsNotInstalled() throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        let folder = store.location(of: .base)
+        try writeWeights(into: folder)
+        try Data().write(to: folder.appending(path: weightFiles[3]))
+        try writeTokenizer(into: folder)
+
+        #expect(!store.isInstalled(.base))
+    }
+
+    /// What a download killed partway leaves in the model's directory is repaired by fetching the weights again.
+    @Test("fetches the weights again when a killed download left only some of them")
+    func repairsAKilledWeightsDownload() async throws {
+        let sandbox = Sandbox()
+        let fetched = Mutex<[ModelComponent]>([])
+        let inner = writingDownloader()
+        let store = FileSystemSpeechModelStore(root: sandbox.root) {
+            model, component, destination, progress in
+            fetched.withLock { $0.append(component) }
+            try await inner(model, component, destination, progress)
+        }
+        let folder = store.location(of: .base)
+        try writeWeights(
+            into: folder.appending(path: "models/argmaxinc/whisperkit-coreml/\(SpeechModel.base.variant)"),
+            files: Array(weightFiles.prefix(2)))
+
+        try await store.install(.base) { _ in }
+
+        #expect(fetched.withLock { $0 } == [.weights, .tokenizer])
+        #expect(store.isInstalled(.base))
+        #expect(!FileManager.default.fileExists(atPath: folder.appending(path: "models").path))
+    }
+
+    /// The weights arrive somewhere else first, so a process killed mid-download leaves the model's directory untouched.
+    @Test("downloads the weights outside the model's directory and moves them in when complete")
+    func stagesTheWeights() async throws {
+        let sandbox = Sandbox()
+        let seen = Mutex<URL?>(nil)
+        let inner = writingDownloader()
+        let store = FileSystemSpeechModelStore(root: sandbox.root) {
+            model, component, destination, progress in
+            if component == .weights { seen.withLock { $0 = destination } }
+            try await inner(model, component, destination, progress)
+        }
+
+        try await store.install(.base) { _ in }
+
+        let staged = try #require(seen.withLock { $0 })
+        #expect(staged.standardizedFileURL != store.location(of: .base).standardizedFileURL)
+        #expect(!FileManager.default.fileExists(atPath: staged.path), "the staging directory is consumed")
+        #expect(store.isInstalled(.base))
+    }
+
+    /// A tokenizer fetched before the weights stays put when the complete weights are moved in.
+    @Test("keeps a tokenizer already on disk when the weights arrive")
+    func keepsTheTokenizerWhenTheWeightsArrive() async throws {
+        let sandbox = Sandbox()
+        let fetched = Mutex<[ModelComponent]>([])
+        let inner = writingDownloader()
+        let store = FileSystemSpeechModelStore(root: sandbox.root) {
+            model, component, destination, progress in
+            fetched.withLock { $0.append(component) }
+            try await inner(model, component, destination, progress)
+        }
+        let folder = store.location(of: .base)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try writeTokenizer(into: folder)
+
+        try await store.install(.base) { _ in }
+
+        #expect(fetched.withLock { $0 } == [.weights])
+        #expect(store.isInstalled(.base))
+    }
+
+    /// Files a failed download already fetched stay in staging, so asking again resumes rather than restarts.
+    @Test("keeps a failed weights download in staging and leaves the model's directory alone")
+    func failedWeightsDownloadStaysStaged() async throws {
+        struct Boom: Error {}
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root) { _, _, destination, _ in
+            try writeWeights(into: destination, files: Array(weightFiles.prefix(2)))
+            throw Boom()
+        }
+
+        await #expect(throws: SpeechEngineError.self) { try await store.install(.base) { _ in } }
+
+        let staged = store.stagingLocation(of: .base).appending(path: weightFiles[0])
+        #expect(FileManager.default.fileExists(atPath: staged.path))
+        #expect(!FileManager.default.fileExists(atPath: store.location(of: .base).path))
+        #expect(!store.isInstalled(.base))
+    }
+
+    /// A download that says it finished but left bundles out is thrown away rather than moved in.
+    @Test("discards staged weights that are incomplete when the download reports success")
+    func incompleteStagedWeightsDiscarded() async {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root) { _, _, destination, _ in
+            try writeWeights(into: destination, files: Array(weightFiles.dropLast()))
+        }
+
+        await #expect(throws: SpeechEngineError.self) { try await store.install(.base) { _ in } }
+
+        #expect(!FileManager.default.fileExists(atPath: store.stagingLocation(of: .base).path))
+        #expect(!FileManager.default.fileExists(atPath: sandbox.root.appending(path: ".partial").path))
+        #expect(!store.isInstalled(.base))
+    }
+
+    @Test("removing a model also discards its half-finished download")
+    func removeDiscardsStaging() throws {
+        let sandbox = Sandbox()
+        let store = FileSystemSpeechModelStore(root: sandbox.root, download: writingDownloader())
+        try writeWeights(into: store.stagingLocation(of: .base), files: [weightFiles[0]])
+
+        try store.remove(.base)
+
+        #expect(!FileManager.default.fileExists(atPath: store.stagingLocation(of: .base).path))
+    }
+
+    @Test("names the weight files of all three bundles a load reads")
+    func namesTheWeightFiles() {
+        #expect(WeightsAssets.fileNames == weightFiles)
+    }
+
     @Test("still reports complete when asked to install what is already installed")
     func idempotentInstallReportsComplete() async throws {
         let sandbox = Sandbox()
@@ -187,7 +341,7 @@ struct FileSystemSpeechModelStoreTests {
     }
 
     /// A half-written directory would be mistaken for a working model next launch.
-    @Test("leaves nothing behind when the download fails")
+    @Test("creates no model directory when the download fails")
     func failedDownloadCleansUp() async {
         struct Boom: Error {}
         let sandbox = Sandbox()

@@ -26,12 +26,12 @@ struct SpeechModelDockTests {
         #expect(dock.accessibilityLabel.contains("2 to 3 minutes"))
     }
 
-    @Test("resting after a failed load says so and offers another attempt")
-    func failedLoadOffersRetry() {
+    @Test("resting after a failed load says so and offers a fresh download")
+    func failedLoadOffersDownload() {
         let dock = DictationPresenter.dock(for: .idle, speechModel: .failed)
 
         #expect(dock.primaryLine == "Speech model didn’t load")
-        #expect(dock.action == .retry)
+        #expect(dock.action == .downloadSpeechModel)
         #expect(dock.symbolName == "exclamationmark.triangle")
     }
 
@@ -72,7 +72,7 @@ struct SpeechModelDockTests {
         #expect(dock.primaryLine == failure.message)
         #expect(dock.action == .retry)
         #expect(dock.secondaryLine == "Dictation can’t start without it")
-        #expect(dock.accessibilityLabel.hasSuffix("reinstall it from Settings."))
+        #expect(dock.accessibilityLabel.hasSuffix("Download it again to repair it."))
     }
 
     @Test(

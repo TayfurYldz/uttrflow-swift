@@ -57,9 +57,9 @@ public enum SpeechModelLoad: Sendable, Equatable {
         "\(String(title.filter { $0 != "…" })). \(sentence(range: "2 to 3"))"
     }
 
-    /// The one way forward: another attempt at a failed load, and nothing while it is still going.
+    /// The one way forward: a fresh download of a model that failed to load, and nothing while it is still going.
     public var recovery: RecoveryAction? {
-        isLoading ? nil : .retry
+        isLoading ? nil : .downloadSpeechModel
     }
 
     private static let whenReady = "Dictation starts working as soon as it’s ready."
@@ -72,7 +72,7 @@ public enum SpeechModelLoad: Sendable, Equatable {
         case .loading:
             Self.whenReady
         case .failed:
-            "Dictation can’t start without it. Try again, or reinstall it from Settings."
+            "Dictation can’t start without it. Download it again to repair it."
         }
     }
 }

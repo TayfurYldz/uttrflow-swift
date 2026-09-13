@@ -51,14 +51,14 @@ struct SpeechModelLoadingSurfacesTests {
         #expect(page.nextStep == nil)
     }
 
-    @Test("a failed load shows a failed card with Try Again")
+    @Test("a failed load shows a failed card with Download")
     func homeShowsTheFailure() throws {
         let page = home(.failed)
         let notice = try #require(page.speechModel)
 
         #expect(!notice.isLoading)
         #expect(notice.title == "The speech model didn’t load")
-        #expect(notice.action == MainAction(title: "Try Again", intent: .recover(.retry)))
+        #expect(notice.action == MainAction(title: "Download", intent: .recover(.downloadSpeechModel)))
         #expect(page.status.text == "Speech model didn’t load")
     }
 
