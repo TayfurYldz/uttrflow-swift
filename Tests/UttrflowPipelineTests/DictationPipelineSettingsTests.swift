@@ -220,8 +220,8 @@ struct DictationPipelineSettingsTests {
         // The second dictation reads its own screen; only then is the abandoned read let go.
         while await context.answered < 1 { try? await Task.sleep(for: .milliseconds(1)) }
         await context.release()
-        while await context.answered < 2 { try? await Task.sleep(for: .milliseconds(1)) }
-        try? await Task.sleep(for: .milliseconds(50))
+        // Both reads kept or dropped, so the abandoned one has had its chance to land.
+        while await pipeline.earlyReadsSettled < 2 { try? await Task.sleep(for: .milliseconds(1)) }
         await pipeline.finishRecording()
 
         #expect(await pipeline.currentState.outcome?.insertedInto == "Notes")

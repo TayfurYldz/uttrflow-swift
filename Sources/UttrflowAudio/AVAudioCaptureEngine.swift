@@ -13,6 +13,8 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
     private var failure: AudioCaptureError?
     /// Says the microphone went during this recording, so the audio either side of the hole does not join.
     private var isGapped = false
+    /// How many interruptions have reached the actor, so a test can wait for the hop instead of a clock.
+    private(set) var interruptionsHandled = 0
     /// Played the moment the microphone closes, since this engine alone knows that instant.
     private let cue: any RecordingCueing
 
@@ -92,6 +94,7 @@ public actor AVAudioCaptureEngine: AudioCaptureEngine {
 
     /// Remembers what a device change did, since only `stop()` has somewhere to report it.
     private func microphoneInterrupted(_ interruption: CaptureInterruption) {
+        interruptionsHandled += 1
         guard currentState == .recording else { return }
         switch interruption {
         case .began: isGapped = true

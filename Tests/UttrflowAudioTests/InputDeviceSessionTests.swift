@@ -191,7 +191,8 @@ struct InputDeviceSessionTests {
 
     /// Waits for the reopen task, which runs off this one.
     private func untilSettled(_ session: InputDeviceSession) async throws {
-        for _ in 0..<200 where session.health == .reopening {
+        let ceiling = ContinuousClock.now + .seconds(30)
+        while session.health == .reopening, ContinuousClock.now < ceiling {
             try await Task.sleep(for: .milliseconds(5))
         }
         // Recorded rather than waited out, so a reopen that never lands fails here instead of downstream.

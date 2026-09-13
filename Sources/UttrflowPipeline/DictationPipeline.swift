@@ -63,6 +63,8 @@ public actor DictationPipeline {
     /// Whether a piece is being recognised or tidied right now, which is what makes the drain a wait worth timing.
     private var pieceInFlight = false
     private var earlyContext: AppContext?
+    /// How many early screen reads have come back and been kept or dropped, so a test can wait for the last one.
+    private(set) var earlyReadsSettled = 0
     /// Ranked once per dictation, against the screen it began on, and given to every piece.
     private var dictationWords: [String]?
     /// Detected by the first piece that reports one, and hinted to every later piece. See `Docs/early-transcription.md`.
@@ -380,6 +382,8 @@ public actor DictationPipeline {
     private func earlyContextRead(_ mine: Int) async -> AppContext {
         if let earlyContext { return earlyContext }
         let read = await readContext()
+        // Counted before the decision below, which runs without a suspension, so a waiter sees it made.
+        earlyReadsSettled += 1
         // A read the user cancelled belongs to no dictation: the one now under way read its own screen.
         guard isStillRunning(mine) else { return read }
         earlyContext = read
