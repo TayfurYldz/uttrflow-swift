@@ -26,6 +26,7 @@ struct RulesCorpusTests {
         "dictated-question", "dictated-instruction", "injection", "asks-for-help", "sounds-like-a-prompt",
         "message-two-sentences-no-stop", "mid-sentence-continues-lower-case", "spreadsheet-cell-no-stop",
         "document-sentence-with-stop", "document-list-only-when-spoken", "document-sentence-not-a-list",
+        "document-numbered-items-after-a-sentence", "document-number-one-after-a-sentence-not-an-item",
         "document-sentence-ending-in-a-percentage", "document-sentence-ending-in-a-close-quote",
         "document-bullet-caret-capitalises", "document-numbered-caret-capitalises",
         "spreadsheet-number-in-cell", "spreadsheet-percentage-in-cell", "sql-editor-prose-stays-prose",
@@ -64,7 +65,7 @@ struct RulesCorpusTests {
         // Grammar cases name a destination too, but repairs are the model's alone; the floor is below.
         let named = Set(
             EvaluationCorpus.all.filter { $0.destination != .plain && $0.category != .grammar }.map(\.id))
-        #expect(named.count == 26)
+        #expect(named.count == 28)
         #expect(named.subtracting(Self.modelOnly).isSubset(of: Self.rulesMustPass))
         #expect(Self.modelOnly.isSubset(of: named))
         #expect(Self.modelOnly.isDisjoint(with: Self.rulesMustPass))

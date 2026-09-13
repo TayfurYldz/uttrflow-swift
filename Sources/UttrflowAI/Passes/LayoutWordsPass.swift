@@ -21,9 +21,9 @@ public struct LayoutWordsPass: CleaningPass {
         var position = 0
         while position < live.count {
             guard
-                let found = mark(at: position, in: live, of: draft),
+                let found = opening(mark(at: position, in: live, of: draft), at: position),
                 position + found.length < live.count,
-                !MentionGuard.isMentioned(at: position, spanning: found.length, in: live, of: draft)
+                isUsed(spanning: found.length, at: position, in: live, of: draft)
             else {
                 position += 1
                 continue
@@ -36,6 +36,25 @@ public struct LayoutWordsPass: CleaningPass {
             position += 1
         }
         return draft
+    }
+
+    /// The mark with nothing to break from at the head of the text, where a break is no layout and only an item's number is.
+    private func opening(
+        _ found: (length: Int, mark: String)?, at position: Int
+    ) -> (length: Int, mark: String)? {
+        guard let found, position == 0 else { return found }
+        let mark = String(found.mark.drop(while: \.isNewline))
+        return mark.isEmpty ? nil : (found.length, mark)
+    }
+
+    /// Whether the phrase is dictated layout rather than named; one opening its sentence has no lookback to ask, so it needs a mark. See `Docs/cleanup.md`.
+    private func isUsed(spanning length: Int, at position: Int, in live: [Int], of draft: Draft) -> Bool {
+        // Asked of the sentence, not the text, so a sentence before it cannot turn "number one is broken" into an item.
+        guard position == 0 || draft.shape(at: live[position - 1]).endsSentence else {
+            return !MentionGuard.isMentioned(at: position, spanning: length, in: live, of: draft)
+        }
+        let last = draft.shape(at: live[position + length - 1])
+        return last.endsClause && !last.endsSentence
     }
 
     /// The layout the words at `position` become: one of the fixed phrases, or a numbered item.

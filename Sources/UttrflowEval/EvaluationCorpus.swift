@@ -748,6 +748,37 @@ public enum EvaluationCorpus {
             mustBeginWith: "What's left to pack\n- The tent",
             mustEndWith: "first aid kit"
         ),
+        // Issue 254: a sentence before the phrase must not decide whether it is an item, in either direction.
+        .init(
+            id: "document-numbered-items-after-a-sentence", category: .contextual,
+            spoken: "here is the plan. number one, fix the build. number two, ship it",
+            expected: "Here is the plan.\n1. Fix the build\n2. Ship it",
+            mustKeep: ["plan", "fix the build", "ship it"],
+            context: AppContext(
+                applicationName: "Pages",
+                bundleIdentifier: "com.apple.iWork.Pages",
+                documentName: "Release.pages"
+            ),
+            mustNotAdd: ["number"],
+            destination: .document,
+            mustBeginWith: "Here is the plan.\n1. Fix the build",
+            mustEndWith: "Ship it"
+        ),
+        .init(
+            id: "document-number-one-after-a-sentence-not-an-item", category: .contextual,
+            spoken: "the build failed. number one is broken",
+            expected: "The build failed. Number one is broken.",
+            mustKeep: ["number", "broken"],
+            context: AppContext(
+                applicationName: "Microsoft Word",
+                bundleIdentifier: "com.microsoft.Word",
+                documentName: "Incident.docx"
+            ),
+            mustNotAdd: ["1."],
+            destination: .document,
+            mustBeginWith: "The build failed. Number",
+            mustEndWith: "broken."
+        ),
         .init(
             id: "document-sentence-not-a-list", category: .contextual,
             spoken: "bring a torch a map and the spare batteries",
