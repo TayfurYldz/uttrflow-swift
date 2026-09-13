@@ -43,6 +43,14 @@ public struct TransformerRouter: TranscriptCleaning {
         try await transform(request)
     }
 
+    /// Runs the message's own passes once over the joined pieces, the way a whole message would have had them.
+    public func finishMessage(_ text: String, for request: TransformationRequest) async -> String {
+        let formatter = DestinationFormatter.standard(for: request.situation.destination)
+        let message = CleaningPipeline.message(
+            for: formatter, situation: request.situation, heard: request.transcription.text)
+        return message.run(Draft(keepingLineBreaks: text)).text
+    }
+
     /// Warms every engine on the route for `situation`, since which one will answer is not known yet.
     public func warm(for situation: Situation?) async {
         for engine in preference.compactMap({ kind in engines.first { $0.kind == kind } }) {

@@ -40,4 +40,18 @@ struct ProtocolDefaultTests {
         await BareCleaner().warm(for: nil)
         await BareTransformer().warm(for: .unknown)
     }
+
+    @Test("a cleaner with no message stage hands a joined message back as it was")
+    func messageStageIsIdentity() async {
+        let request = TransformationRequest(transcription: Transcription(text: "on my way"))
+        #expect(
+            await BareCleaner().finishMessage("on my way. be there", for: request) == "on my way. be there")
+    }
+
+    @Test("a request is the whole message unless it says it is a piece")
+    func requestScopeDefaultsToMessage() {
+        let transcription = Transcription(text: "on my way")
+        #expect(TransformationRequest(transcription: transcription).scope == .message)
+        #expect(TransformationRequest(transcription: transcription, scope: .piece).scope == .piece)
+    }
 }

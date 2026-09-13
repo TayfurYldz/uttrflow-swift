@@ -324,8 +324,8 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let state = await pipeline.currentState
-        // Three pieces are three sentences, so the chat window's short-message rule leaves the stop on.
-        #expect(state.outcome?.text == "W1 X W2 X W3 X.")
+        // Each seam ends a sentence; the final stop is the message stage's, which this cleaner leaves alone.
+        #expect(state.outcome?.text == "W1 X. W2 X. W3 X")
         #expect(state.outcome?.cleanedBy == .foundationModels)
         #expect(await speech.calls == 3)
         let counts = await speech.sampleCounts
@@ -443,7 +443,7 @@ struct DictationPipelineEarlyWorkTests {
 
         let state = await pipeline.currentState
         #expect(
-            state.outcome?.text == "W3 X W2 X W4 X.", "the failed piece is redone in its own place")
+            state.outcome?.text == "W3 X. W2 X. W4 X", "the failed piece is redone in its own place")
         #expect(await speech.calls == 4, "only the failed piece and the tail are left for the end")
     }
 
@@ -459,7 +459,7 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.retry(recording.id)
 
         let state = await pipeline.currentState
-        #expect(state.outcome?.text == "W1 X W2 X W3 X")
+        #expect(state.outcome?.text == "W1 X. W2 X. W3 X")
         #expect(state.outcome?.isFromRecording == true)
         #expect(await speech.calls == 3)
     }
@@ -473,7 +473,7 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.startRecording()
         await pipeline.finishRecording()
 
-        #expect(await pipeline.currentState.outcome?.text == "W1 X W3 X")
+        #expect(await pipeline.currentState.outcome?.text == "W1 X. W3 X")
     }
 
     @Test("a recording with nothing in any window is refused as silence")
@@ -498,8 +498,7 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let outcome = await pipeline.currentState.outcome
-        // Three pieces are three sentences, which is past the short-message rule, so the message ends stopped.
-        #expect(outcome?.text == "W1 X W2 X W3 X.")
+        #expect(outcome?.text == "W1 X. W2 X. W3 X")
         #expect(outcome?.changes.corrections.map(\.wordRange) == [0..<1, 2..<3, 4..<5])
         #expect(outcome?.changes.spokenWords == 6)
     }
@@ -514,7 +513,7 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let outcome = await pipeline.currentState.outcome
-        #expect(outcome?.text == "W1 X w2 x W3 X.")
+        #expect(outcome?.text == "W1 X. w2 x. W3 X")
         #expect(outcome?.cleanedBy == .rules)
     }
 
@@ -586,7 +585,7 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.retry(recording.id)
 
         #expect(
-            await pipeline.currentState.outcome?.text == "W1 X W2 X W3 X",
+            await pipeline.currentState.outcome?.text == "W1 X. W2 X. W3 X",
             "the pieces are joined in the order they were spoken")
         #expect(rendezvous.recognitions == 3)
         // Each stage waits for the other, so a late-scheduled tidy is waited for rather than missed.
