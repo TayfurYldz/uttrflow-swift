@@ -71,8 +71,8 @@ public struct Draft: Sendable, Equatable {
             return true
         }
 
-        /// Whether the word is a line break, a paragraph break or a bullet rather than something said.
-        public var isLayoutMark: Bool { text.hasPrefix("\n") || text == Draft.bullet }
+        /// Whether the word is a line break, a paragraph break, a bullet or an item number rather than something said.
+        public var isLayoutMark: Bool { text.hasPrefix("\n") || text == Draft.bullet || isListMark }
 
         /// Whether the word opens a list item, with a bullet or with a number; neither takes a full stop.
         public var isListMark: Bool {
