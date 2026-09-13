@@ -16,9 +16,10 @@ final class OnboardingModel {
     init(flow: OnboardingFlow) {
         self.flow = flow
         self.page = flow.page
+        // Reads the flow through `self`, since the flow keeps this closure and must not be kept by it.
         flow.onChange = { [weak self] _ in
             guard let self else { return }
-            page = flow.page
+            page = self.flow.page
         }
     }
 
