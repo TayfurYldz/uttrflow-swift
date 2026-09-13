@@ -143,12 +143,42 @@ struct ReplayedExchangeTests {
         #expect(ResponseUnwrapper.unwrap(produced, spoken: "first line second line") == produced)
     }
 
-    @Test("keeps the lines after the answer's own label")
+    @Test("keeps the lines after the answer's own label, and the break between them")
     func keepsContinuationAfterTheLabel() {
         let produced = "Cleaned: \"First line.\"\nStill part of the answer."
         #expect(
-            ResponseUnwrapper.unwrap(produced, spoken: "first line still part")
-                == "\"First line.\" Still part of the answer."
+            ResponseUnwrapper.unwrap(produced, spoken: "first line\nstill part of the answer")
+                == "\"First line.\"\nStill part of the answer."
         )
+    }
+
+    /// A label the speaker opened a later line with is theirs, and the line above it is not an echo.
+    @Test(
+        "keeps a label the speaker said at the start of a later line",
+        arguments: [
+            ("Do we discount?\nAnswer: We do not discount.", "do we discount\nanswer: we do not discount"),
+            ("Ship it.\nResult: 42.", "ship it\nresult 42"),
+        ]
+    )
+    func keepsALabelOnALaterLine(produced: String, spoken: String) {
+        #expect(ResponseUnwrapper.unwrap(produced, spoken: spoken) == produced)
+    }
+
+    /// The speaker's "Answer" is protected, and the model's "Cleaned" on the same reply still goes.
+    @Test("still strips the model's label beside a label the speaker said")
+    func stripsTheModelsLabelBesideTheSpeakers() {
+        let produced = "Cleaned: Do we discount?\nAnswer: We do not discount."
+        #expect(
+            ResponseUnwrapper.unwrap(produced, spoken: "do we discount\nanswer: we do not discount")
+                == "Do we discount?\nAnswer: We do not discount."
+        )
+    }
+
+    /// A draft that opens with "texting" said no "Text" label, so the model's is still packaging.
+    @Test("strips a label the speaker only said as part of a longer word")
+    func stripsALabelThatIsOnlyAPrefix() {
+        #expect(
+            ResponseUnwrapper.unwrap("Text: Texting you now.", spoken: "texting you now")
+                == "Texting you now.")
     }
 }
