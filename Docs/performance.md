@@ -657,6 +657,26 @@ files), not taken from the catalogue. The application is the signed bundle from
 `make app`. A fresh install is therefore **660 MB**, of which 98% is the speech model
 and all of it is downloaded on first launch rather than shipped.
 
+## Suggestions under Low Power Mode and thermal pressure
+
+A suggestion pass is the most expensive thing tab-to-complete does. Measured with
+`uttrflow-bakeoff complete --fixtures --model gemma3`, release build, under `/usr/bin/time -l`:
+30 fixtures cost 22.96 processor-seconds and one cost 4.09, so each pass past the first is
+**0.65 processor-seconds and 11.3 G instructions** on this machine, p50 784 ms. Scaled to an M1's
+performance cores that is about 1.1 processor-seconds per paused line. A debug build costs twice
+that, so measure this in release.
+
+It is also discretionary: the corpus still offers what it remembers without it. So the app hands
+`SuggestionCoordinator` its model wrapped in `DiscretionaryGenerator`, which:
+
+- runs every pass in a utility task, resumed through a continuation so the awaiting turn does not
+  raise the pass back to its own priority, with the caller's cancellation passed on;
+- reports itself not ready, and starts no pass, while `EnergyConditions.current()` says the Mac is
+  in Low Power Mode or at serious or critical thermal pressure.
+
+Scoring a remembered candidate is left as it was: it is one forward pass, raced against a deadline,
+and slowing it would turn a slow answer into a refused candidate.
+
 ## What these numbers are not
 
 Stated rather than estimated around, because an invented figure in a performance
