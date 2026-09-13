@@ -6,6 +6,9 @@ struct DecoderPrefill {
     /// Tokens force-fed before the first sampled one, which is the `sampleBegin` every logits filter needs.
     let count: Int
 
+    /// Where the start-of-transcript token sits, which is also the first alignment row the transcript's word timings read.
+    let transcriptStart: Int
+
     /// The prefill for a decode conditioned on `promptTokens`, after the trimming WhisperKit applies to them.
     init(promptTokens: [Int]?, specialTokenBegin: Int, isMultilingual: Bool) {
         let prompt = Self.forcedPrompt(
@@ -13,13 +16,19 @@ struct DecoderPrefill {
         // Start-of-transcript and the timestamps token, plus a language and a task where the model has them.
         let opening = 2 + (isMultilingual ? 2 : 0)
         // A prompt that survives trimming arrives behind a start-of-previous token; one that does not is dropped whole.
-        count = opening + (prompt.isEmpty ? 0 : prompt.count + 1)
+        transcriptStart = prompt.isEmpty ? 0 : prompt.count + 1
+        count = opening + transcriptStart
     }
 
     /// The prompt the decoder is actually fed: its last ``VocabularyPrompt/maximumTokens``, instructions removed.
     static func forcedPrompt(from promptTokens: [Int]?, specialTokenBegin: Int) -> [Int] {
         guard let promptTokens else { return [] }
         return promptTokens.suffix(VocabularyPrompt.maximumTokens).filter { $0 < specialTokenBegin }
+    }
+
+    /// WhisperKit's segment seeker, reading word timings from the transcript's own alignment rows rather than the prompt's.
+    func segmentSeeker() -> any SegmentSeeking {
+        transcriptStart == 0 ? SegmentSeeker() : PromptAlignedSegmentSeeker(transcriptStart: transcriptStart)
     }
 
     /// The timestamp rules, told where sampling begins because WhisperKit's own copy cannot see past a prompt.
