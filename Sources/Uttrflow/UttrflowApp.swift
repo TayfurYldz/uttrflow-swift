@@ -1,6 +1,7 @@
 // The entry point.
 
 import AppKit
+import Foundation
 import UttrflowCore
 import UttrflowLocalModel
 import UttrflowPipeline
@@ -12,7 +13,9 @@ enum UttrflowApp {
     static func main() {
         let application = NSApplication.shared
         // One model both validates a remembered suggestion and invents one where there is none; its weights are fetched when the feature is first built, never at launch.
-        let model = MLXCandidateScorer(model: .gemma3)
+        let model = IdleReleasingModel(
+            model: MLXCandidateScorer(model: .gemma3),
+            idleAfter: IdleRelease.window(physicalMemory: ProcessInfo.processInfo.physicalMemory))
         // Generation is discretionary: utility priority, and no pass in Low Power Mode or under thermal pressure.
         let generating = DiscretionaryGenerator(
             model, mayRun: { EnergyConditions.current().allowsDiscretionaryWork })

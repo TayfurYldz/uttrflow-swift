@@ -209,7 +209,7 @@ Measured on Release builds with `/usr/bin/time -l` and MLX's own counters, 48 GB
 | holder | loaded when | released when | cost |
 |---|---|---|---|
 | speech model, Whisper large-v3 turbo on CoreML | launch, `loadSpeechModel()` | quit | +114 MB footprint loaded, 267 MB peak footprint and 340 MB peak resident mid-dictation; the weights are file-mapped, so macOS can drop them itself |
-| suggestion model, Gemma 3 4B QAT on MLX | launch or the moment Suggestions is turned on, only for somebody who turned it on | Suggestions turned off, or quit | 2,485 MB of GPU memory, 3,036 MB at a pass's peak, 3,464 MB peak process footprint; anonymous, so nothing but a release frees it |
+| suggestion model, Gemma 3 4B QAT on MLX | launch or the moment Suggestions is turned on, only for somebody who turned it on | Suggestions turned off; no query for 3 minutes on a Mac under 16 GB, 10 minutes otherwise; or quit | 2,485 MB of GPU memory, 3,036 MB at a pass's peak, 3,464 MB peak process footprint; anonymous, so nothing but a release frees it |
 | MLX's buffer cache | during a pass | the end of every pass | capped at 256 MB, 0 MB between passes |
 | the recording | the shortcut | the end of the dictation | at most 15 MB: 240 s at 16 kHz in 4-byte samples |
 | clipboard thumbnails | the panel is drawn | least recently used first | at most 32 MB, see `Docs/clipboard-budget.md` |
@@ -245,7 +245,17 @@ instructions and the vocabulary and empties MLX's cache. Measured with
 | one second after `release()` | 0 MB | 190 MB |
 
 MLX holds no active memory after the release; the 190 MB left is the process with MLX and Metal initialised and has not been broken down further. Turning the
-feature back on loads the weights again from disk in about 3 s.
+feature back on loads the weights again from disk: `gpu-memory --release` timed that reload at 3.2 s and 4.4 s in two runs, back to 2,485 MB active.
+
+### When nothing is being typed
+
+`IdleReleasingModel` lets the weights go when no suggestion has asked for the model within a
+window chosen from `ProcessInfo.physicalMemory` by `IdleRelease.window`: 3 minutes on a Mac
+with less than 16 GB, 10 minutes otherwise. The next query in a supported field loads it
+again in the background; that moment's model suggestion stays quiet, as it does during any
+load, and remembered completions are unaffected. A release the caller asked for — the switch
+turned off — is never undone by a query. So on a small Mac the 3 GB is held while somebody is
+typing, not through a meeting or a film.
 
 ### Under memory pressure
 

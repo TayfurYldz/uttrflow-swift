@@ -17,7 +17,9 @@ struct GPUMemory: AsyncParsableCommand {
     @Option(name: .long, help: "Cancel every Nth pass part-way through; 0 cancels none.")
     var cancelEvery = 4
 
-    @Flag(name: .long, help: "Release the model after the idle reading and report what is left.")
+    @Flag(
+        name: .long,
+        help: "Release the model after the idle reading, report what is left, then time loading it again.")
     var release = false
 
     @Option(name: .long, help: "Which model to run, by repository or short name.")
@@ -51,6 +53,12 @@ struct GPUMemory: AsyncParsableCommand {
             await scorer.release()
             try? await Task.sleep(for: .seconds(1))
             print("released                  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())")
+            let reloading = ContinuousClock.now
+            try await scorer.prepare()
+            let reload = Int((ContinuousClock.now - reloading) / .milliseconds(1))
+            print(
+                "reloaded in \(String(reload).leftPadded(to: 5)) ms  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())"
+            )
         }
         let sorted = times.sorted()
         guard !sorted.isEmpty else { return }

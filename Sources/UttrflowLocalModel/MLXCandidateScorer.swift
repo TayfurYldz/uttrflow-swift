@@ -23,7 +23,7 @@ public struct JudgedToken: Sendable, Equatable {
 }
 
 /// Judges and invents suggestions with one loaded model: scores a candidate, or generates one from nothing.
-public actor MLXCandidateScorer: CandidateScoring, PassShowing {
+public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel {
     private let model: LocalModel
     private let maximumTokens: Int
     private var container: ModelContainer?
