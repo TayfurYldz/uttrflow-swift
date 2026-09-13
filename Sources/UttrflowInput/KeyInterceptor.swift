@@ -90,21 +90,49 @@ final class InterceptorTap: @unchecked Sendable {
         var stopped = false
     }
 
+    /// What the tap's thread borrows, emptied on that thread before it reports the state released.
+    private final class Loan: @unchecked Sendable {
+        var tap: CFMachPort?
+        var source: CFRunLoopSource?
+
+        init(tap: CFMachPort, source: CFRunLoopSource) {
+            self.tap = tap
+            self.source = source
+        }
+    }
+
     private let tap: CFMachPort
     private let source: CFRunLoopSource
     /// The state the callback reads, retained until no callback can still be running.
     private let held: Unmanaged<TapState>
-    private let lifecycle = Mutex(Lifecycle())
+    /// Shared with the tap's thread, which never holds the tap object itself.
+    private let lifecycle = LifecycleLock()
+    /// Called once the state is released and the thread lets go of the port, which tests wait on instead of a clock.
+    private let released: @Sendable () -> Void
 
-    private init(tap: CFMachPort, source: CFRunLoopSource, held: Unmanaged<TapState>) {
+    /// The lock around `Lifecycle`, in a class so the thread can hold it without holding the tap.
+    private final class LifecycleLock: Sendable {
+        let lock = Mutex(Lifecycle())
+    }
+
+    private init(
+        tap: CFMachPort, source: CFRunLoopSource, held: Unmanaged<TapState>,
+        released: @escaping @Sendable () -> Void
+    ) {
         self.tap = tap
         self.source = source
         self.held = held
+        self.released = released
     }
 
-    /// Builds the tap, or says that the system would not; `makePort` is replaced only by tests.
+    /// Stops a tap nobody stopped, so a discarded tap still gives back its port and state.
+    deinit { stop() }
+
+    /// Builds the tap, or says that the system would not; `makePort` and `released` are replaced only by tests.
     static func create(
-        state: TapState, makePort: (UnsafeMutableRawPointer) -> CFMachPort? = InterceptorTap.keyDownTap
+        state: TapState,
+        makePort: (UnsafeMutableRawPointer) -> CFMachPort? = InterceptorTap.keyDownTap,
+        released: @escaping @Sendable () -> Void = {}
     ) throws(KeyInterceptorFailure) -> InterceptorTap {
         let held = Unmanaged.passRetained(state)
         guard
@@ -115,7 +143,7 @@ final class InterceptorTap: @unchecked Sendable {
             throw .tapRefused
         }
         state.adopt(tap)
-        return InterceptorTap(tap: tap, source: source, held: held)
+        return InterceptorTap(tap: tap, source: source, held: held, released: released)
     }
 
     /// The session tap on key-down that `create` uses outside tests.
@@ -131,25 +159,18 @@ final class InterceptorTap: @unchecked Sendable {
 
     /// A thread of its own, because a tap starved by a busy run loop is a tap the system disables.
     func run() {
-        let starting = lifecycle.withLock { life in
+        let starting = lifecycle.lock.withLock { life in
             guard !life.stopped, !life.started else { return false }
             life.started = true
             return true
         }
         guard starting else { return }
-        let thread = Thread { [self] in
-            let live = lifecycle.withLock { life in
-                guard !life.stopped else { return false }
-                life.loop = CFRunLoopGetCurrent()
-                CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-                return true
-            }
-            if live {
-                CGEvent.tapEnable(tap: tap, enable: true)
-                CFRunLoopRun()
-            }
+        let loan = Loan(tap: tap, source: source)
+        let thread = Thread { [lifecycle, held, released] in
+            Self.serve(loan, lifecycle: lifecycle)
             // Callbacks run only inside this thread's run loop, so none can be in flight past this line.
             held.release()
+            released()
         }
         thread.name = "co.uttrflow.key-interceptor"
         // Above the default, so a keystroke is decided before the app about to receive it wakes.
@@ -157,9 +178,25 @@ final class InterceptorTap: @unchecked Sendable {
         thread.start()
     }
 
+    /// Runs the tap's run loop until `stop`, then empties the loan so the thread holds nothing of the tap.
+    private static func serve(_ loan: Loan, lifecycle: LifecycleLock) {
+        guard let tap = loan.tap, let source = loan.source else { return }
+        loan.tap = nil
+        loan.source = nil
+        let live = lifecycle.lock.withLock { life in
+            guard !life.stopped else { return false }
+            life.loop = CFRunLoopGetCurrent()
+            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+            return true
+        }
+        guard live else { return }
+        CGEvent.tapEnable(tap: tap, enable: true)
+        CFRunLoopRun()
+    }
+
     /// Stops the tap; the state is released once the tap's thread has left its run loop.
     func stop() {
-        let (first, started, loop) = lifecycle.withLock { life in
+        let (first, started, loop) = lifecycle.lock.withLock { life in
             defer { life.stopped = true }
             return (!life.stopped, life.started, life.loop)
         }
@@ -169,7 +206,10 @@ final class InterceptorTap: @unchecked Sendable {
         CFRunLoopSourceInvalidate(source)
         CFMachPortInvalidate(tap)
         if let loop { CFRunLoopStop(loop) }
-        if !started { held.release() }
+        if !started {
+            held.release()
+            released()
+        }
     }
 }
 
