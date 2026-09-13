@@ -303,3 +303,57 @@ struct PieceJoinerWholeTests {
         #expect(words[7] == "peeair")
     }
 }
+
+@Suite("The final stop is the message's, not the last piece's")
+struct PieceJoinerStopTests {
+    /// The inversion: spoken in one breath it keeps its stop, and cut into three it used to lose it.
+    @Test("stops a message long enough for the rule, however many pieces it was cut into")
+    func stopsALongMessageSpokenInPieces() {
+        let pieces = ["I left the office", "The traffic is bad", "I will be late"]
+
+        let whole = PieceJoiner.join(pieces.map { piece($0) }, under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "I left the office The traffic is bad I will be late.")
+    }
+
+    @Test("leaves a short message unstopped, in pieces or not")
+    func leavesAShortMessageAlone() {
+        let whole = PieceJoiner.join(
+            [piece("On my way"), piece("Be there soon")], under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "On my way Be there soon")
+    }
+
+    /// Only the full stop was ever taken back, so a question mark must survive the whole-message question too.
+    @Test("keeps a question mark the speaker ended on")
+    func keepsAQuestionMark() {
+        let whole = PieceJoiner.join(
+            [piece("I am running late"), piece("Can you bring the charger?")],
+            under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "I am running late Can you bring the charger?")
+    }
+
+    /// Every other policy already answered correctly per piece, and must be left exactly as it was.
+    @Test(
+        "says nothing about a destination whose rule does not read the length",
+        arguments: [Destination.plain, .document, .email, .codeEditor])
+    func leavesOtherDestinationsAlone(destination: Destination) {
+        let pieces = [piece("I left the office."), piece("I will be late.")]
+
+        let whole = PieceJoiner.join(pieces, under: .standard(for: destination))
+
+        #expect(
+            whole.cleaned.text
+                == PieceJoiner.laidOut(
+                    pieces.map(\.cleaned.text), under: .standard(for: destination)))
+    }
+
+    /// A single piece is already the whole message, so the joiner is not the one that decides.
+    @Test("leaves a one-piece dictation to the pass that already answered it")
+    func leavesOnePieceAlone() {
+        let whole = PieceJoiner.join([piece("On my way")], under: .standard(for: .messaging))
+
+        #expect(whole.cleaned.text == "On my way")
+    }
+}
