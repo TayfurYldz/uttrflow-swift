@@ -327,8 +327,7 @@ public enum FocusedFieldReader {
 
     /// The font at the caret, so the ghost is set in the field's own face and size.
     private static func typeStyle(_ field: AXUIElement, at range: CFRange) -> TypeStyle? {
-        let widened =
-            range.length > 0 ? range : CFRange(location: max(range.location - 1, 0), length: 1)
+        let widened = AccessibilityRange.widenedForStyle(range)
         guard
             let answer = SurfaceProbe.parameterized(
                 field, kAXAttributedStringForRangeParameterizedAttribute, widened),

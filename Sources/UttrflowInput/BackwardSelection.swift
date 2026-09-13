@@ -9,6 +9,15 @@ public enum BackwardSelection {
         return units.distance(from: units.startIndex, to: preceding.startIndex)..<caret
     }
 
+    /// The characters before a selection and the selection itself, its length clamped into the text, or `nil` where the caret is unreadable.
+    public static func replacing(
+        in text: String, location: Int, length: Int, covering characters: Int
+    ) -> Range<Int>? {
+        guard let preceding = range(in: text, endingAt: location, covering: characters) else { return nil }
+        let selected = Swift.min(Swift.max(length, 0), text.utf16.count - location)
+        return preceding.lowerBound..<(location + selected)
+    }
+
     /// Exactly `characters` before `caret`, or `nil` when there are fewer; the delete path needs the count.
     public static func text(
         in text: String, endingAt caret: Int, exactly characters: Int

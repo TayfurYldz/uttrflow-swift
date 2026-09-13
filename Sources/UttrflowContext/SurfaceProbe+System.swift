@@ -75,15 +75,11 @@ public enum SurfaceProbe {
     private static func style(_ field: AXUIElement, at range: CFRange) -> NSAttributedString? {
         guard
             let answer = parameterized(
-                field, kAXAttributedStringForRangeParameterizedAttribute, styled(range)),
+                field, kAXAttributedStringForRangeParameterizedAttribute,
+                AccessibilityRange.widenedForStyle(range)),
             let attributed = answer as? NSAttributedString, attributed.length > 0
         else { return nil }
         return attributed.attribute(.font, at: 0, effectiveRange: nil) == nil ? nil : attributed
-    }
-
-    /// Widens an empty caret range to one character, which is what the style read needs.
-    private static func styled(_ range: CFRange) -> CFRange {
-        range.length > 0 ? range : CFRange(location: max(range.location - 1, 0), length: 1)
     }
 
     /// One attribute read with a range for a parameter, which is how a field is asked about part of its text.
