@@ -158,6 +158,20 @@ struct SettingsGeneralPaneTests {
                 == .shortcut(action: .dictate, keys: ["⌘", "K"]))
     }
 
+    /// Issue 353: the Dictate row showed one cap, ⌥, for a shortcut of ⌃⌥⌘ held together.
+    @Test("shows every modifier of a shortcut made only of modifiers")
+    func showsAModifierChord() {
+        var settings = Settings.default
+        settings.hotkey = HotkeyBinding(keyCode: 58, modifiers: [.option, .command, .control])
+        settings.clipboardHotkey = .shiftCommandV
+        #expect(
+            general(settings).row("shortcut.dictate")?.control
+                == .shortcut(action: .dictate, keys: ["⌃", "⌥", "⌘"]))
+        #expect(
+            general(settings).row("shortcut.clipboard")?.control
+                == .shortcut(action: .clipboard, keys: ["⇧", "⌘", "V"]))
+    }
+
     @Test("offers both ways of activating, with the stored one selected")
     func offersBothActivations() {
         var settings = Settings.default
