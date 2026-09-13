@@ -570,6 +570,15 @@ entries at **0.72 ms**, and asserts a 25 ms bound as an order-of-magnitude guard
 expansion has never been timed, so it has no budget: proposing one before measuring it
 would be inventing a number, which is the thing this document exists not to do.
 
+The doubtful-word candidate step is budgeted at under 5 ms a piece (`Docs/cleanup-design.md`)
+and measures around 2 ms on a quiet Mac, but **its test does not time it**: a wall-clock bound
+failed under a sanitizer build and a busy machine on changes that never touched it (#136, #373).
+`DoubtfulWordsTests` counts Double Metaphone encodings instead, through
+`DoubleMetaphone.tally`, and fails when ten times the screen words costs more than one encoding
+each, or a doubtful run costs more than four — the shape of re-reading the screen once per run,
+which is what made the step slow. A number for the step belongs in this table from a profile
+run, not in a gate.
+
 A fifteen-second dictation is finished 3.6 seconds after the speaker stops — about
 4× real time. Roughly 40% of that is transcription and 55% is Apple's clean-up pass.
 
