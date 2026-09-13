@@ -84,7 +84,7 @@ the one home for the words and for when the minutes are said.
 
 | Where | While loading | If the load fails |
 |---|---|---|
-| Home page | A card: **Loading the speech model…** with a spinner, and the ring's status reads *Loading speech model*. "Try it now" is withheld. | **The speech model didn’t load**, with **Try Again**. |
+| Home page | A card: **Loading the speech model…** with a spinner, and the ring's status reads *Loading speech model*. | **The speech model didn’t load**, with **Try Again**. |
 | Floating button | A wide pill with an hourglass: **Loading speech model…** | **Speech model didn’t load**, with **Try Again**. |
 | Shortcut or button pressed | **Speech model still loading…** through the same notice every dictation failure uses, informational, and the microphone never opens. | Dictation starts, and the recogniser tries the load again on demand. |
 | Clipboard panel | The microphone is off: *Speech model still loading*. | Off, as for a model that is not ready. |
