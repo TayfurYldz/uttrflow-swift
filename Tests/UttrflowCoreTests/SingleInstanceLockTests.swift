@@ -17,21 +17,22 @@ struct SingleInstanceLockTests {
         return false
     }
 
-    /// Starts a separate process that holds `file` for `seconds` and exits, returning once it says it holds it.
-    private func holder(of file: URL, forSeconds seconds: Double = 60) throws -> Process {
+    /// Starts a separate process that holds `file` until it is signalled, returning once it says it holds it.
+    private func holder(of file: URL) throws -> Process {
         let script = """
-            import fcntl, sys, time
+            import fcntl, signal, sys
             f = open(sys.argv[1], "a")
             fcntl.flock(f, fcntl.LOCK_EX)
             print("held", flush=True)
-            time.sleep(float(sys.argv[2]))
+            while True:
+                signal.pause()
             """
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/env")
         process.arguments = [
-            "python3", "-c", script, file.path(percentEncoded: false), String(seconds),
+            "python3", "-c", script, file.path(percentEncoded: false),
         ]
         let output = Pipe()
         process.standardOutput = output
@@ -69,7 +70,8 @@ struct SingleInstanceLockTests {
             withExtendedLifetime(first) {}
             #expect(isHeldElsewhere(second))
         }
-        guard case .acquired = SingleInstanceLock.acquire(at: file) else {
+        // Waits, because a process another test is launching can briefly share the released descriptor.
+        guard case .acquired = SingleInstanceLock.acquire(at: file, waitingUpTo: .seconds(30)) else {
             Issue.record("releasing the first lock did not free it")
             return
         }
@@ -100,12 +102,13 @@ struct SingleInstanceLockTests {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = SingleInstanceLock.defaultFile(in: folder)
-        // The holder quits on its own, so nothing here depends on another thread being scheduled in time.
-        let process = try holder(of: file, forSeconds: 1.5)
+        let process = try holder(of: file)
         defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
         #expect(isHeldElsewhere(SingleInstanceLock.acquire(at: file)))
 
-        let outcome = SingleInstanceLock.acquire(at: file, waitingUpTo: .seconds(20))
+        // Asked to quit only after the refusal, so the wait starts against a holder that is still going.
+        kill(process.processIdentifier, SIGTERM)
+        let outcome = SingleInstanceLock.acquire(at: file, waitingUpTo: .seconds(30))
         guard case .acquired = outcome else {
             Issue.record("the wait gave up before the holder exited")
             return
