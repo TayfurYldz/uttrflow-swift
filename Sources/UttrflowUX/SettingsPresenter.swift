@@ -402,6 +402,13 @@ public enum SettingsPresenter {
                 symbolName: "clock",
                 title: "Getting ready",
                 message: "The model is being read into memory. This happens once per launch.")
+        case .releasedForMemory:
+            return SettingsBanner(
+                symbolName: "memorychip",
+                title: "Paused to free memory",
+                message:
+                    "This Mac is short of memory, so the model that finishes your lines has been "
+                    + "set aside. Suggestions come back on their own once memory frees up.")
         case .failed:
             return SettingsBanner(
                 symbolName: "exclamationmark.triangle",

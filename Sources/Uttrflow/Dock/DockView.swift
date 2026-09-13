@@ -344,14 +344,16 @@ enum DockMetrics {
 
 // MARK: - Parts
 
-/// The level as a row of capsules, redrawn every display frame and clipped so new bars enter from the edge.
+/// The level as a row of capsules, redrawn up to the motion budget's rate and clipped so new bars enter from the edge.
 private struct LevelMeterView: View {
     let model: DockViewModel
     /// Whether the mark is on the leading edge; sound always flows in from the side away from the mark.
     let towardsLeading: Bool
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(
+            .animation(minimumInterval: MotionBudgetObserver.shared.budget.dockFrameInterval)
+        ) { timeline in
             Canvas { context, size in
                 let phase = min(
                     max(
@@ -373,11 +375,14 @@ private struct WorkingDots: View {
     @State private var began = Date.now
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        let motion = MotionBudgetObserver.shared.budget
+        TimelineView(
+            .animation(minimumInterval: motion.dockFrameInterval, paused: !motion.workingDotsMove)
+        ) { timeline in
             let elapsed = timeline.date.timeIntervalSince(began)
             HStack(spacing: DockMetrics.dotSpacing) {
                 ForEach(0..<DockMetrics.dotCount, id: \.self) { index in
-                    let lift = Self.lift(elapsed, index)
+                    let lift = motion.workingDotsMove ? Self.lift(elapsed, index) : Self.stillLift
                     Circle()
                         .fill(Color.dockActive)
                         .frame(width: DockMetrics.dotSize, height: DockMetrics.dotSize)
@@ -396,6 +401,9 @@ private struct WorkingDots: View {
         if phase < 0 { phase += 1 }
         return sin(phase * .pi)
     }
+
+    /// How lit every dot is while Reduce Motion holds them still: fully, so the row still reads as working.
+    static let stillLift = 1.0
 
     /// How long one walk across the three dots takes.
     private static let cycle = 1.05

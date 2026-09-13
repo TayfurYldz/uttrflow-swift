@@ -24,15 +24,18 @@ form made the listening pill 286 points wide on every dictation, for a state it 
   microphone. The tap hands over 4096 frames at a time, about twelve blocks a second, so
   polling faster only resamples the same number and polling much slower shows a meter that
   steps. The timer runs in `.common` mode, or a drag of the button to another corner freezes it.
-- The row is redrawn on every display frame at a fractional offset from `lastArrival`, not on
-  arrival: twenty sideways jumps a second reads as stepping rather than flowing.
+- The row is redrawn up to 60 times a second at a fractional offset from `lastArrival`, not on
+  arrival: twenty sideways jumps a second reads as stepping rather than flowing. In Low Power
+  Mode or at serious thermal pressure it drops to the 20 Hz data rate and accepts the step, per
+  `MotionBudget`; see `Docs/performance.md`.
 - Meter width is fixed at 56 points; how many bars fit is a consequence of the width.
 - `meterAmplitude` 0.9 keeps a loud syllable from touching the glass. `settledLevel` 0.18 is
   where the row settles when the microphone closes; zero reads as a broken panel.
 - Working is three dots walking left to right, in the meter's own 56 points so the pill keeps
   its width. It runs for as long as there is work left, which includes the wait for the
   application to take the words: transcribing, tidying and inserting are one wait to the
-  person waiting, so they are one animation and one sentence.
+  person waiting, so they are one animation and one sentence. Under Reduce Motion the three
+  dots hold still and fully lit, per `MotionBudget`.
 - It used to resolve instead — 0.34 s settling the row the voice left behind, then a 0.3 s
   spring folding the bars into a tick — on the reasoning that a loop is the animation of a
   wait with no end. The wait does have an end, but the animation reached it first: the tick

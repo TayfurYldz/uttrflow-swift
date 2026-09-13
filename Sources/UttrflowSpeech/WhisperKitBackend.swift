@@ -143,7 +143,7 @@ extension FileSystemSpeechModelStore {
     }
 }
 
-/// Owns the loaded recogniser; `WhisperKit` is not `Sendable`, and the actor above serialises every call.
+/// Owns the loaded recogniser; `WhisperKit` is not `Sendable`, and `BackedSpeechEngine` admits one call at a time.
 private final class LoadedKit: @unchecked Sendable {
     private let kit: WhisperKit
 

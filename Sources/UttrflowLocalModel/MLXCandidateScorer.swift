@@ -23,7 +23,7 @@ public struct JudgedToken: Sendable, Equatable {
 }
 
 /// Judges and invents suggestions with one loaded model: scores a candidate, or generates one from nothing.
-public actor MLXCandidateScorer: CandidateScoring, PassShowing {
+public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel {
     private let model: LocalModel
     private let maximumTokens: Int
     private var container: ModelContainer?
@@ -61,6 +61,14 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing {
                 tokenizer: context.tokenizer, endOfTurn: context.configuration.extraEOSTokens,
                 endingIds: context.configuration.eosTokenIds)
         }
+    }
+
+    /// Drops the weights and everything read from them, and hands the freed GPU buffers back to the system.
+    public func release() {
+        container = nil
+        warm = nil
+        vocabulary = nil
+        bufferCache.clear()
     }
 
     /// The instructions as the model has already read them, so a pass pays only for the moment's own tokens.

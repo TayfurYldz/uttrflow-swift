@@ -36,6 +36,7 @@ private final class AttentionReportingView: NSView {
         super.viewDidMoveToWindow()
         let centre = NotificationCenter.default
         centre.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         guard let window else {
             report(false)
             return
@@ -54,6 +55,10 @@ private final class AttentionReportingView: NSView {
         for name in applicationNotices {
             centre.addObserver(self, selector: #selector(recheck), name: name, object: nil)
         }
+        for notice in MotionBudget.changeNotices {
+            notice.centre.addObserver(
+                self, selector: #selector(motionBudgetChanged), name: notice.name, object: nil)
+        }
         recheck()
     }
 
@@ -68,13 +73,19 @@ private final class AttentionReportingView: NSView {
         recheck()
     }
 
+    /// Rechecks on the main thread, since power and thermal notices arrive on the thread that posted them.
+    @objc nonisolated private func motionBudgetChanged() {
+        Task { @MainActor in self.recheck() }
+    }
+
     @objc private func recheck() {
         let attention = WindowAttention(
             isShown: window != nil && !isHiddenOrHasHiddenAncestor,
             isKey: window?.isKeyWindow ?? false,
             isApplicationActive: NSApp.isActive,
             isApplicationHidden: NSApp.isHidden,
-            isOnScreen: window?.occlusionState.contains(.visible) ?? false)
+            isOnScreen: window?.occlusionState.contains(.visible) ?? false,
+            motion: .current())
         report(attention.animates)
     }
 
@@ -84,5 +95,8 @@ private final class AttentionReportingView: NSView {
         onChange?(animates)
     }
 
-    deinit { NotificationCenter.default.removeObserver(self) }
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
 }

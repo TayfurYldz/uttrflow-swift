@@ -166,7 +166,7 @@ to 12 GB in forty minutes of typing.
 `MLXCandidateScorer` — a generation, an alternatives pass, a score — empties it when the
 pass ends, however it ends. `MLXCleanupModel` does the same around a rewrite. So turning
 suggestions off or leaving the Mac idle leaves the weights and at most the capped cache —
-in practice nothing. The weights themselves stay loaded until the app quits.
+in practice nothing. Turning suggestions off also releases the weights — see [the memory budget](#the-memory-budget).
 
 Measured with `uttrflow-bakeoff gpu-memory` (Release, Gemma 3 4B QAT, 48 GB Apple silicon):
 forty passes over invented message threads of 120–310 words, every fourth pass cancelled
@@ -194,6 +194,81 @@ part-way, each followed by one score. The figures are MLX's own counters, in MB.
 - **Either half alone leaves memory behind.** A 1 GB cap without
   emptying held 1,024 MB after every run; emptying without a cap left 107 MB behind a
   cancelled pass. Both together are what the table shows.
+
+## The memory budget
+
+Uttrflow runs all day on Macs with far less memory than the one these figures came from, so
+what it holds is budgeted against the smallest Mac it supports: an 8 GB MacBook Air, where
+macOS and a browser already claim most of the memory before Uttrflow opens.
+
+### What holds memory, and when
+
+Measured on Release builds with `/usr/bin/time -l` and MLX's own counters, 48 GB Apple silicon,
+13 September 2026.
+
+| holder | loaded when | released when | cost |
+|---|---|---|---|
+| speech model, Whisper large-v3 turbo on CoreML | launch, `loadSpeechModel()` | quit | +114 MB footprint loaded, 267 MB peak footprint and 340 MB peak resident mid-dictation; the weights are file-mapped, so macOS can drop them itself |
+| suggestion model, Gemma 3 4B QAT on MLX | launch or the moment Suggestions is turned on, only for somebody who turned it on | Suggestions turned off; no query for 3 minutes on a Mac under 16 GB, 10 minutes otherwise; or quit | 2,485 MB of GPU memory, 3,036 MB at a pass's peak, 3,464 MB peak process footprint; anonymous, so nothing but a release frees it |
+| MLX's buffer cache | during a pass | the end of every pass | capped at 256 MB, 0 MB between passes |
+| the recording | the shortcut | the end of the dictation | at most 15 MB: 240 s at 16 kHz in 4-byte samples |
+| clipboard thumbnails | the panel is drawn | least recently used first | at most 32 MB, see `Docs/clipboard-budget.md` |
+| clipboard, history, dictionary and suggestion stores | launch | quit | under a megabyte of text each at measured sizes; the prediction corpus is SQLite on disk |
+
+Clean-up runs in Apple's model process, not this one, and is not counted here.
+
+### The budget
+
+| state | 8 GB Mac | 16 GB Mac and up |
+|---|---|---|
+| idle, suggestions off | **≤ 300 MB** footprint | ≤ 300 MB |
+| peak during a dictation, suggestions off | **≤ 400 MB** | ≤ 400 MB |
+| suggestions on, between passes | ≤ 3.0 GB, and none of it under memory pressure | ≤ 3.0 GB |
+| suggestions on, peak of a pass | ≤ 3.5 GB | ≤ 3.5 GB |
+| after turning suggestions off | back to the idle line within a second | same |
+
+The speech model fits inside the first two lines with room to spare, and it stays loaded:
+reloading costs the next dictation 2–9 s, and about 150 s on the first load after a reboot
+(`Docs/startup.md`), while its file-backed weights are exactly the memory macOS already
+reclaims on its own.
+
+The suggestion model is what the budget is about. On an 8 GB Mac its 3 GB is close to half of
+all memory, which is why nothing loads it for somebody who never asked, and why turning the
+feature off gives it back. `AppDelegate` releases it when the switch goes off, after any load
+still running has landed, and `MLXCandidateScorer.release()` drops the weights, the warmed
+instructions and the vocabulary and empties MLX's cache. Measured with
+`uttrflow-bakeoff gpu-memory --release`:
+
+| | MLX active | process footprint |
+|---|---|---|
+| loaded, after six passes and 5 s idle | 2,485 MB | 2,677 MB |
+| one second after `release()` | 0 MB | 190 MB |
+
+MLX holds no active memory after the release; the 190 MB left is the process with MLX and Metal initialised and has not been broken down further. Turning the
+feature back on loads the weights again from disk: `gpu-memory --release` timed that reload at 3.2 s and 4.4 s in two runs, back to 2,485 MB active.
+
+### When nothing is being typed
+
+`IdleReleasingModel` lets the weights go when no suggestion has asked for the model within a
+window chosen from `ProcessInfo.physicalMemory` by `IdleRelease.window`: 3 minutes on a Mac
+with less than 16 GB, 10 minutes otherwise. The next query in a supported field loads it
+again in the background; that moment's model suggestion stays quiet, as it does during any
+load, and remembered completions are unaffected. A release the caller asked for — the switch
+turned off — is never undone by a query. So on a small Mac the 3 GB is held while somebody is
+typing, not through a meeting or a film.
+
+### Under memory pressure
+
+`MemoryPressureSource` watches the kernel's pressure events. At a warning or a critical
+reading `AppDelegate` releases the suggestion model the same way, and the Suggestions screen
+says it is paused to free memory rather than going quiet. Once pressure is back to normal the
+model waits for the calm to last before it loads again — two minutes the first time — and
+`SuggestionModelPressure` doubles that wait, up to thirty minutes, each time a reload is
+followed by pressure within thirty minutes. Without the wait, the 3 s reload of 2.5 GB is
+exactly what pushes a small Mac straight back into pressure, and the model would load and
+drop in a loop. A reload that holds for thirty minutes starts the wait over.
+
+The speech model is left alone under pressure, for the reasons above.
 
 ## Processor
 
@@ -403,10 +478,10 @@ Two changes, both in `Sources/Uttrflow/Main/`:
   the feature is.
 - **Its clock wakes when the drawing changes, not on every display frame.**
   `ClipboardDemonstrationMoments` is the card's `TimelineSchedule`. Of the eight-second loop,
-  only the panel rising (0.9 s) and going (0.6 s) move continuously, and those still get an
-  instant every 1/120 s. The typed line wakes once per character, and everything else is a
-  still state that wakes once, at its boundary. That is 228 wakes a loop instead of 960 at
-  120 Hz. `ClipboardDemonstrationMomentsTests` checks that the instant drawn matches what the
+  only the panel rising (0.9 s) and going (0.6 s) move continuously, and those got an
+  instant every 1/120 s, now every 1/30 s (below). The typed line wakes once per character, and
+  everything else is a still state that wakes once, at its boundary. That was 226 wakes a loop
+  instead of 960 at 120 Hz. `ClipboardDemonstrationMomentsTests` checks that the instant drawn matches what the
   clock would show everywhere outside the moving stretches.
 
 ### Measured, before and after
@@ -455,8 +530,40 @@ without per-character typing at 12.6–18.8% across two runs:
 None is distinguishable from noise of about ±5 points, so none is in the code. Per-character
 typing is: over 64 seconds, back to back, it read 12.3% against 14.0% without it, in line
 with its 26% fewer wakes. What remains while animating is roughly proportional to the number
-of wakes, which is why the schedule is the lever and the frame rate during motion is not
-lowered.
+of wakes, which is why the schedule is the lever, and why the frame budget below lowers the
+rate during motion rather than anything else.
+
+### Reduce Motion, Low Power Mode, thermal pressure and a frame budget
+
+None of the app's continuous animations asked what the Mac wanted (#377). `MotionBudget` answers
+that as a pure value from Reduce Motion and `EnergyConditions` (Low Power Mode and thermal
+state), tested in `MotionBudgetTests`:
+
+| | demonstration | working dots | dock frame cap |
+|---|---|---|---|
+| nothing asked | moves, 30 frames a second while the panel moves | walk | 60 a second |
+| Reduce Motion | still frame | still, fully lit | 60 a second |
+| Low Power Mode | still frame | walk | 20 a second, the meter's data rate |
+| serious or critical thermal state | still frame | walk | 20 a second |
+
+`WindowAttention` carries the budget, and `WindowVisibility.swift` re-evaluates it on
+`NSProcessInfoPowerStateDidChange`, `ProcessInfo.thermalStateDidChangeNotification` and
+`NSWorkspace.accessibilityDisplayOptionsDidChangeNotification` beside the window notices. The dock
+reads `MotionBudgetObserver.shared`, which re-reads on the same three notices.
+
+Counted headlessly by `ClipboardDemonstrationMomentsTests`, with the 39-character address line:
+
+| schedule | wakes per eight-second loop | while the panel rises | while it goes |
+|---|---|---|---|
+| every display frame, 120 Hz | 960 | 108 | 72 |
+| on change, motion at 120 Hz | 226 | 108 | 72 |
+| on change, motion at 30 Hz | 91 | 27 | 18 |
+| still, under any budget that stops it | 1 | 0 | 0 |
+
+Wakes fall by 60% against the schedule above, and the section above found the cost roughly
+proportional to wakes. **The processor figure for the 30 Hz cap has not been taken**: it needs
+the harness and the frame-count gate described above, and until somebody runs them the 11.3%
+row stands as the last measurement.
 
 ### The clipboard poll
 

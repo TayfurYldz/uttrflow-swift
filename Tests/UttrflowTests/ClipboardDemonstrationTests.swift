@@ -222,15 +222,23 @@ struct ClipboardDemonstrationMomentsTests {
         #expect(Double(offsets(loops: 1).count) < everyFrame * 0.25)
     }
 
-    @Test("still wakes at the display's rate while the panel rises and goes")
-    func movesSmoothly() {
+    @Test("wakes at 30 frames a second while the panel rises and goes, and no faster")
+    func movesAtTheFrameCap() {
         let moments = offsets(loops: 1)
         for range in [1.0...1.9, 4.3...4.9] {
             let moving = moments.filter { range.contains($0) }
             let gaps = zip(moving, moving.dropFirst()).map { $1 - $0 }
-            #expect(moving.count > 60)
-            #expect(gaps.allSatisfy { $0 <= ClipboardDemonstrationMoments.frame + 1e-9 })
+            let frames = (range.upperBound - range.lowerBound) * 30
+            #expect(Double(moving.count) >= frames - 1)
+            #expect(Double(moving.count) <= frames + 1)
+            #expect(gaps.allSatisfy { $0 <= 1.0 / 30 + ClipboardDemonstrationMoments.nudge + 1e-9 })
         }
+    }
+
+    @Test("wakes 91 times over one eight-second loop: 45 frames of motion and a wake per step and character")
+    func wakesPerLoop() {
+        #expect(ClipboardDemonstrationMoments.frame == MotionBudget.demonstrationFrameInterval)
+        #expect(offsets(loops: 1).count == 91)
     }
 
     @Test("wakes once for each character of the typed line, not once a frame")

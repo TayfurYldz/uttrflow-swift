@@ -23,4 +23,11 @@ struct SuggestionModelWiringTests {
         #expect(text.contains("DiscretionaryGenerator("))
         #expect(text.contains("EnergyConditions.current().allowsDiscretionaryWork"))
     }
+
+    @Test("holds the model only while it is asked for, over a window chosen by the Mac's memory")
+    func modelIsReleasedWhenIdle() throws {
+        let text = try source
+        #expect(text.contains("IdleReleasingModel("))
+        #expect(text.contains("IdleRelease.window(physicalMemory: ProcessInfo.processInfo.physicalMemory)"))
+    }
 }
