@@ -229,4 +229,50 @@ enum PhoneticIndexFixture {
 extension Array {
     /// The single element, or nil otherwise; `first` would pass a test that produced three corrections.
     fileprivate var only: Element? { count == 1 ? first : nil }
+
+    // MARK: - A run of several words
+
+    /// Measured on this corpus: two signals clear the margin, and at length nothing else stopped them.
+    @Test(
+        "refuses an entry that neither spells a multi-word run nor opens as it does",
+        arguments: [
+            ("URL", "air well"), ("Aditi", "it to"),
+        ])
+    func refusesARunItDoesNotSpell(entry: String, heard: String) {
+        #expect(
+            WordCorrectionEngine.spells(
+                DictionaryEntry(word: entry, origin: .added, firstSeen: .now), asHeard: heard)
+                == false)
+    }
+
+    @Test(
+        "keeps a run the entry spells, or opens as",
+        arguments: [
+            ("PaymentSheet", "payment sheet"), ("setUserPrefs", "set user prefs"),
+            ("Uttrflow", "utter flow"), ("SQL", "s q l"), ("Grafana", "graf an a"),
+        ])
+    func keepsARunItSpells(entry: String, heard: String) {
+        #expect(
+            WordCorrectionEngine.spells(
+                DictionaryEntry(word: entry, origin: .added, firstSeen: .now), asHeard: heard))
+    }
+
+    /// One word for one word is the ordinary case, and the evidence decides it as it always did.
+    @Test("says nothing about a run of one word")
+    func saysNothingAboutOneWord() {
+        #expect(
+            WordCorrectionEngine.spells(
+                DictionaryEntry(word: "Cache", origin: .added, firstSeen: .now), asHeard: "cash"))
+    }
+
+    /// The pronunciation field exists for exactly this: a spelling that does not open as the sound does.
+    @Test("takes the run back when the user wrote the pronunciation for it")
+    func thePronunciationCounts() {
+        let bare = DictionaryEntry(word: "Kubectl", origin: .added, firstSeen: .now)
+        let said = DictionaryEntry(
+            word: "Kubectl", pronunciation: "cube cuttle", origin: .added, firstSeen: .now)
+
+        #expect(WordCorrectionEngine.spells(bare, asHeard: "cube cuttle") == false)
+        #expect(WordCorrectionEngine.spells(said, asHeard: "cube cuttle"))
+    }
 }
