@@ -1,8 +1,8 @@
-private import ApplicationServices
-private import CoreGraphics
-private import Dispatch
+internal import ApplicationServices
+internal import CoreGraphics
+internal import Dispatch
 private import Foundation
-private import Synchronization
+internal import Synchronization
 public import UttrflowPredict
 
 /// Why the tap is not running.
@@ -33,7 +33,7 @@ public final class KeyInterceptor: Sendable {
     /// The source the callback signals, on whose queue the taken keystrokes are turned into events.
     private let drain: any DispatchSourceUserDataAdd
     /// The tap in force, or `nil` when nothing is watching the keyboard.
-    private let running = Mutex<RunningTap?>(nil)
+    private let running = Mutex<InterceptorTap?>(nil)
 
     public init() {
         let (events, continuation) = AsyncStream<InterceptedEvent>.makeStream()
@@ -64,7 +64,7 @@ public final class KeyInterceptor: Sendable {
     public func start() throws(KeyInterceptorFailure) {
         guard AXIsProcessTrusted() else { throw .accessibilityDenied }
         guard running.withLock({ $0 == nil }) else { return }
-        let tap = try RunningTap.create(state: state)
+        let tap = try InterceptorTap.create(state: state)
         running.withLock { $0 = tap }
         tap.run()
     }
@@ -80,40 +80,76 @@ public final class KeyInterceptor: Sendable {
 }
 
 /// The tap, its run loop source, and the thread the two live on.
-private final class RunningTap: @unchecked Sendable {
-    private let tap: CFMachPort
-    private let source: CFRunLoopSource
-    /// The run loop of the tap's own thread, known only once that thread has started.
-    private let loop = Mutex<CFRunLoop?>(nil)
-
-    private init(tap: CFMachPort, source: CFRunLoopSource) {
-        self.tap = tap
-        self.source = source
+final class InterceptorTap: @unchecked Sendable {
+    /// Where the tap is in its life, read and written under one lock so `stop` and the thread agree.
+    private struct Lifecycle {
+        /// The run loop of the tap's own thread, known only once that thread has started.
+        var loop: CFRunLoop?
+        /// Whether `run` has handed the release of the state to the thread.
+        var started = false
+        var stopped = false
     }
 
-    /// Builds the tap, or says that the system would not.
-    static func create(state: TapState) throws(KeyInterceptorFailure) -> RunningTap {
+    private let tap: CFMachPort
+    private let source: CFRunLoopSource
+    /// The state the callback reads, retained until no callback can still be running.
+    private let held: Unmanaged<TapState>
+    private let lifecycle = Mutex(Lifecycle())
+
+    private init(tap: CFMachPort, source: CFRunLoopSource, held: Unmanaged<TapState>) {
+        self.tap = tap
+        self.source = source
+        self.held = held
+    }
+
+    /// Builds the tap, or says that the system would not; `makePort` is replaced only by tests.
+    static func create(
+        state: TapState, makePort: (UnsafeMutableRawPointer) -> CFMachPort? = InterceptorTap.keyDownTap
+    ) throws(KeyInterceptorFailure) -> InterceptorTap {
+        let held = Unmanaged.passRetained(state)
         guard
-            let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap,
-                place: .headInsertEventTap,
-                options: .defaultTap,
-                eventsOfInterest: CGEventMask(1) << CGEventType.keyDown.rawValue,
-                callback: keyInterceptorCallback,
-                userInfo: state.pointer),
+            let tap = makePort(held.toOpaque()),
             let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        else { throw .tapRefused }
+        else {
+            held.release()
+            throw .tapRefused
+        }
         state.adopt(tap)
-        return RunningTap(tap: tap, source: source)
+        return InterceptorTap(tap: tap, source: source, held: held)
+    }
+
+    /// The session tap on key-down that `create` uses outside tests.
+    static func keyDownTap(userInfo: UnsafeMutableRawPointer) -> CFMachPort? {
+        CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(1) << CGEventType.keyDown.rawValue,
+            callback: keyInterceptorCallback,
+            userInfo: userInfo)
     }
 
     /// A thread of its own, because a tap starved by a busy run loop is a tap the system disables.
     func run() {
+        let starting = lifecycle.withLock { life in
+            guard !life.stopped, !life.started else { return false }
+            life.started = true
+            return true
+        }
+        guard starting else { return }
         let thread = Thread { [self] in
-            loop.withLock { $0 = CFRunLoopGetCurrent() }
-            CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-            CGEvent.tapEnable(tap: tap, enable: true)
-            CFRunLoopRun()
+            let live = lifecycle.withLock { life in
+                guard !life.stopped else { return false }
+                life.loop = CFRunLoopGetCurrent()
+                CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+                return true
+            }
+            if live {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                CFRunLoopRun()
+            }
+            // Callbacks run only inside this thread's run loop, so none can be in flight past this line.
+            held.release()
         }
         thread.name = "co.uttrflow.key-interceptor"
         // Above the default, so a keystroke is decided before the app about to receive it wakes.
@@ -121,16 +157,24 @@ private final class RunningTap: @unchecked Sendable {
         thread.start()
     }
 
+    /// Stops the tap; the state is released once the tap's thread has left its run loop.
     func stop() {
+        let (first, started, loop) = lifecycle.withLock { life in
+            defer { life.stopped = true }
+            return (!life.stopped, life.started, life.loop)
+        }
+        guard first else { return }
         CGEvent.tapEnable(tap: tap, enable: false)
+        held.takeUnretainedValue().relinquish(tap)
         CFRunLoopSourceInvalidate(source)
         CFMachPortInvalidate(tap)
-        if let loop = loop.withLock({ $0 }) { CFRunLoopStop(loop) }
+        if let loop { CFRunLoopStop(loop) }
+        if !started { held.release() }
     }
 }
 
 /// Everything the C callback may touch, held where a raw pointer can reach it.
-private final class TapState: @unchecked Sendable {
+final class TapState: @unchecked Sendable {
     /// How many taken keystrokes may wait for the drain before the oldest are dropped.
     static let capacity = 64
 
@@ -167,12 +211,19 @@ private final class TapState: @unchecked Sendable {
         ring.deallocate()
     }
 
-    /// The pointer handed to `tapCreate`, which is this object without a retain.
-    var pointer: UnsafeMutableRawPointer { Unmanaged.passUnretained(self).toOpaque() }
-
-    /// Keeps the port where the callback can re-enable the tap without taking a lock.
+    /// Keeps the port where the callback can re-enable the tap without taking a lock, releasing the one it replaces.
     func adopt(_ port: CFMachPort) {
-        tapPointer.store(Unmanaged.passRetained(port).toOpaque(), ordering: .releasing)
+        if let previous = tapPointer.exchange(Unmanaged.passRetained(port).toOpaque(), ordering: .releasing) {
+            Unmanaged<CFMachPort>.fromOpaque(previous).release()
+        }
+    }
+
+    /// Lets go of the port if it is still the one held, which its tap keeps alive for any callback still reading it.
+    func relinquish(_ port: CFMachPort) {
+        let expected = Unmanaged.passUnretained(port).toOpaque()
+        if tapPointer.compareExchange(expected: expected, desired: nil, ordering: .releasing).exchanged {
+            Unmanaged<CFMachPort>.fromOpaque(expected).release()
+        }
     }
 
     /// The port to re-enable, read only on the path where the tap has already been disabled.
