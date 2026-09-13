@@ -85,6 +85,22 @@ extension ShortcutSet: Codable {
             bound[action] = bindings
         }
         self.init(bound)
+        for action in Self.boundOnlyToBareModifiers(in: bound) { returnToDefault(action) }
+    }
+
+    /// The actions a stored set bound to nothing but a modifier held alone, which this build no longer accepts.
+    public static func boundOnlyToBareModifiers(
+        in bound: [ShortcutAction: [HotkeyBinding]]
+    ) -> Set<ShortcutAction> {
+        Set(bound.filter { !$0.value.isEmpty && $0.value.allSatisfy(\.isBareModifier) }.keys)
+    }
+
+    /// Gives an action its shipped shortcut back, unless another action has since taken those keys.
+    public mutating func returnToDefault(_ action: ShortcutAction) {
+        for binding in Self.default.bindings(for: action)
+        where self.action(holding: binding, besides: action) == nil {
+            add(binding, to: action)
+        }
     }
 
     public func encode(to encoder: any Encoder) throws {

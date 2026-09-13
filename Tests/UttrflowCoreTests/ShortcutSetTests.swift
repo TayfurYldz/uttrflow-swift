@@ -76,6 +76,36 @@ struct ShortcutSetTests {
         #expect(restored == set)
     }
 
+    /// Issue 342: a stored bare modifier would otherwise be dropped, leaving the action with no shortcut at all.
+    @Test("returns an action stored as a modifier held alone to its default, and keeps the others")
+    func bareModifiersReturnToTheDefault() throws {
+        let json =
+            #"{"dictate": [{"keyCode": 55, "modifiers": ["command"]}], "clipboard": [{"keyCode": 63, "modifiers": []}]}"#
+        let set = try JSONDecoder().decode(ShortcutSet.self, from: Data(json.utf8))
+
+        #expect(set.bindings(for: .dictate) == ShortcutSet.default.bindings(for: .dictate))
+        #expect(set.bindings(for: .clipboard) == [.functionHold])
+    }
+
+    @Test("leaves the action unbound when its default is already another action's")
+    func returnToDefaultRespectsAClash() {
+        var set = ShortcutSet([.clipboard: [.optionSpace]])
+        set.returnToDefault(.dictate)
+
+        #expect(!set.isBound(.dictate))
+        #expect(set.first(for: .clipboard) == .optionSpace)
+    }
+
+    @Test("names only the actions bound to nothing but bare modifiers")
+    func namesTheBareActions() {
+        let bareCommand = HotkeyBinding(keyCode: 55, modifiers: [])
+        let bare = ShortcutSet.boundOnlyToBareModifiers(in: [
+            .dictate: [bareCommand], .clipboard: [bareCommand, .shiftCommandV], .pasteLastTranscript: [],
+        ])
+
+        #expect(bare == [.dictate])
+    }
+
     @Test("drops an action a later build invented, rather than refusing the file")
     func unknownActionsAreDropped() throws {
         let json =
