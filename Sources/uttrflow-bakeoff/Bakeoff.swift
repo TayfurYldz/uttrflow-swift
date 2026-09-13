@@ -239,15 +239,15 @@ struct Bakeoff: AsyncParsableCommand {
 
         if verbose {
             for measurement in measurements {
-                let worst = measurement.report.attempted.filter { !$0.passed }
+                // The stored verdict, not one rebuilt from it, so a file older than a reason still lists the case.
+                let worst = measurement.report.cases.filter { !$0.declined && !$0.passed }
                 guard !worst.isEmpty else { continue }
                 // Two candidates can share a family name, so the size tells the Gemmas apart.
                 print(
                     "\n\(measurement.description.name) \(measurement.description.parameters)"
                         + " failed \(worst.count):")
-                for score in worst {
-                    let lost = score.lost.isEmpty ? "" : "  lost \(score.lost.joined(separator: ", "))"
-                    print("  \(score.caseID.padded(to: 26)) \(percent(score.similarity))\(lost)")
+                for result in worst {
+                    print("  \(result.caseID.padded(to: 26)) \(percent(result.similarity))\(result.reasons)")
                 }
             }
         }
@@ -359,8 +359,21 @@ struct StoredReport: Codable, Sendable {
         let destination: String?
         let similarity: Double
         let lost: [String]
+        /// Absent from results stored before the reasons were kept, like `destination`, so an older file still decodes.
+        let invented: [String]?
+        /// Absent from results stored before the reasons were kept.
+        let brokeShape: [String]?
         let passed: Bool
         let declined: Bool
+
+        /// Why the case failed, one clause per reason, or a note when the file is too old to say.
+        var reasons: String {
+            let named = [("lost", lost), ("invented", invented ?? []), ("shape", brokeShape ?? [])]
+                .filter { !$0.1.isEmpty }
+                .map { "  \($0.0) \($0.1.joined(separator: ", "))" }
+                .joined()
+            return named.isEmpty && invented == nil ? "  (stored before its reasons were kept)" : named
+        }
     }
 
     /// Pass rate within one category, which is the axis an overall figure hides.
@@ -391,7 +404,8 @@ struct StoredReport: Codable, Sendable {
             CaseResult(
                 caseID: $0.caseID, category: corpus[$0.caseID]?.category.rawValue ?? "unknown",
                 destination: corpus[$0.caseID]?.destination.rawValue,
-                similarity: $0.similarity, lost: $0.lost, passed: $0.passed, declined: $0.declined)
+                similarity: $0.similarity, lost: $0.lost, invented: $0.invented,
+                brokeShape: $0.brokeShape, passed: $0.passed, declined: $0.declined)
         }
     }
 
@@ -406,7 +420,7 @@ struct StoredReport: Codable, Sendable {
             CaseScore(
                 caseID: $0.caseID, similarity: $0.similarity,
                 keptEverythingRequired: $0.lost.isEmpty, lost: $0.lost, isExact: false,
-                declined: $0.declined)
+                declined: $0.declined, invented: $0.invented ?? [], brokeShape: $0.brokeShape ?? [])
         }
     }
 
