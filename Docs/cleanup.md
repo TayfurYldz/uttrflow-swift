@@ -285,6 +285,21 @@ one model call per piece — is `Docs/cleanup-design.md`. Below is where things 
 - The pieces cut while recording (`Docs/early-transcription.md`) are each tidied alone,
   which is why paragraph breaks and list layout have to be decided when the pieces are
   joined, not inside one piece.
+- **A reply of three words or fewer goes to the rules alone** (`RulesAlone.shortReplies`,
+  applied by `TransformerRouter` whenever the rules are on its route). Only when every
+  character is ASCII, so a Devanagari reply still reaches the model that romanises it, and
+  only when the recogniser doubted none of the words, since choosing a doubtful word's
+  reading is the model's job and not the rules'. The recogniser already capitalises and
+  punctuates a short reply, question marks included, and the passes do the rest, so the
+  model's answer was the rules' answer on every one measured, while the call was most of
+  the wait. Measured on 14 September 2026 through `DictationPipeline` in one long-lived Release
+  process with the model loaded once: 17 English dictations of one to three words, synthetic speech
+  with noise and gain variants, each run with the shipping router and again pinned to the
+  rules — the final text was identical in 17 of 17, and the median wait after the key came
+  up was 3.35 s against 0.95 s on a machine at a load average of 70–200. The limit is three
+  because that is what was measured; 4–5-word replies were identical too (3 of 3), and
+  across 118 English dictations of every length the model changed the final text twice.
+  Pinned routes, such as the bake-off's per-engine rows, are unaffected.
 
 ## What the app shows and lets you change
 
