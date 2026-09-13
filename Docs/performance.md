@@ -37,6 +37,41 @@ because it is much the largest thing this document has ever found.
 536 MB. An 8 GB Mac is never in danger from Uttrflow alone. Ten consecutive dictations
 left the process smaller than it started.
 
+## The energy budget
+
+Uttrflow runs all day, from login, on laptops. The Mac to design for is the smallest one it
+supports: an 8 GB M1 Air, which has no fan and slows itself down when it gets hot. Its
+performance cores do roughly 55–60% of the work of this document's M5 Pro, and it has far
+fewer of them, so the budget is written in quantities that do not depend on the machine —
+wakeups, work per event, processor-seconds per second of speech — and scaled where a figure
+has to be.
+
+| state | budget | today |
+|---|---|---|
+| idle: menu bar only, windows closed, suggestions off | ~0% of a core; at most 2 timer wakeups a second from the app's own code | clipboard poll 4.8/s (#375) |
+| idle with tab-to-complete on | nothing beyond the line above once 12 s have passed with no keystroke, click or switch and nothing drawn | a 1 Hz tick for ever, each one an Accessibility read of the frontmost app (#374) |
+| typing, suggestions on | the tap callback does one atomic load; a turn per keystroke, coalesced to one running and one waiting; a model pass only after 120 ms of quiet, cancelled by the next key | as budgeted |
+| a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | user-initiated, ungated (#376); 0.65 processor-seconds per pass here, so ≈ 1.1 on M1 |
+| dictation | speech ≤ 0.1 processor-seconds per second of audio on M1; finished within 0.5× the audio's length on M1 | 0.04 here, which scales to ≈ 0.07; 0.20× wall clock here on a loaded machine |
+| animation | none continuous while nobody can see it; none decorative under Reduce Motion, Low Power Mode or serious thermal pressure | #359, #377 |
+
+How the rows were measured, on 13 September 2026, on a machine at a load average of 50–180 from
+other builds, so wall-clock figures are pessimistic and processor-seconds are the ones to trust:
+
+- **Model pass.** `uttrflow-bakeoff complete --fixtures --model gemma3`, release build, under
+  `/usr/bin/time -l`: 30 fixtures cost 22.96 processor-seconds and one cost 4.09, so each pass
+  past the first is 0.65 processor-seconds and 11.3 G instructions, p50 784 ms. A debug build
+  costs twice that (1.28 s), which is why this row is measured in release.
+- **Speech.** `uttrflow-bakeoff profile --transcribe-only`, release: 0.15, 0.51 and 2.19
+  processor-seconds for 3.4, 13.9 and 58.1 seconds of speech — 0.04 per second of audio, 0.27 G
+  instructions per second of audio.
+- **Clipboard poll.** A stand-alone loop that sleeps and reads `NSPasteboard.changeCount`, its
+  own wakeups read with `proc_pid_rusage`: 4.8 wakeups a second at 200 ms, 1.7 at 500 ms with a
+  100 ms tolerance, 1.0 at 1 s. Processor time is under 0.05% of a core in every case; the
+  wakeups are the cost.
+- **The tick.** Counted from the code, not measured: one wakeup a second and one cross-process
+  Accessibility read, for as long as the feature is on.
+
 ## The method
 
 `uttrflow-bakeoff profile` drives one process through the app's whole life and reads
