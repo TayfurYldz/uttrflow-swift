@@ -17,8 +17,12 @@ struct WindowAttention: Equatable {
     /// Whether any part of the window is on screen, from `NSWindow.occlusionState`.
     var isOnScreen: Bool
 
-    /// Moves only in the window being used; a window merely visible behind another app stays still.
+    /// What Reduce Motion, Low Power Mode and thermal pressure allow.
+    var motion = MotionBudget()
+
+    /// Moves only in the window being used, and only while the motion budget lets decoration move.
     var animates: Bool {
         isShown && isKey && isApplicationActive && !isApplicationHidden && isOnScreen
+            && motion.demonstrationMoves
     }
 }
