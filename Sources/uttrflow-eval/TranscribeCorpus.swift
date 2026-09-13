@@ -426,6 +426,7 @@ struct TranscribeCorpus: AsyncParsableCommand {
         case .transformation: "clean-up was not run — pass --shipping"
         case .expansion: "no snippets are expanded here; expansion is the app's"
         case .insertion: "nothing is typed into another app during an evaluation"
+        case .drain: "nothing is worked ahead here; a passage is transcribed whole"
         }
     }
 

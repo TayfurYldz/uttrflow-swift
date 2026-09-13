@@ -304,7 +304,7 @@ struct DictationPipelineRecoveryTests {
         _ = await dictate(pipeline)
 
         let measurements = await recorder.measurements
-        // Capture is draining and converting the buffer; the hold itself is `spokenFor`, not a stage.
+        // Capture drains the buffer, the hold is `spokenFor`, and no piece is in flight here to wait for.
         #expect(
             measurements.map(\.stage) == [
                 .capture, .transcription, .correction, .transformation, .expansion, .insertion,
@@ -360,7 +360,7 @@ struct DictationPipelineRecoveryTests {
     }
 
     /// The one test on the real clock, proving all six stages report time actually spent.
-    @Test("a real dictation, on the real clock, times all six stages")
+    @Test("a real dictation, on the real clock, times every stage it goes through")
     func realDictationTimesEveryStage() async {
         let recorder = RecordingMetricsRecorder()
         let pipeline = makePipeline(
@@ -383,7 +383,8 @@ struct DictationPipelineRecoveryTests {
 
         #expect(state.insertedOutcome?.text == "Email me the PaymentSheet Kind regards, Naveen.")
         let measurements = await recorder.measurements
-        #expect(measurements.map(\.stage) == PipelineStage.allCases)
+        // Every stage but the drain, which only a dictation long enough to work ahead ever waits for.
+        #expect(measurements.map(\.stage) == PipelineStage.allCases.filter { $0 != .drain })
         #expect(
             measurements.allSatisfy { $0.succeeded && $0.duration > .zero },
             "every stage spent real time and none of it is missing")
