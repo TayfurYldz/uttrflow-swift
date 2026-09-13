@@ -305,14 +305,15 @@ struct DictationPipelineRecoveryTests {
 
         let measurements = await recorder.measurements
         // Capture is draining and converting the buffer; the hold itself is `spokenFor`, not a stage.
+        // No piece is ever in flight in this take, so the drain is not a wait this dictation had.
         #expect(
             measurements.map(\.stage) == [
-                .capture, .drain, .transcription, .correction, .transformation, .expansion, .insertion,
+                .capture, .transcription, .correction, .transformation, .expansion, .insertion,
             ])
         #expect(measurements.allSatisfy { $0.succeeded })
         #expect(
             measurements.map(\.duration) == [
-                .zero, .zero, .zero, .milliseconds(4), .milliseconds(120), .milliseconds(2),
+                .zero, .zero, .milliseconds(4), .milliseconds(120), .milliseconds(2),
                 .milliseconds(30),
             ])
     }
@@ -360,7 +361,7 @@ struct DictationPipelineRecoveryTests {
     }
 
     /// The one test on the real clock, proving all six stages report time actually spent.
-    @Test("a real dictation, on the real clock, times all six stages")
+    @Test("a real dictation, on the real clock, times every stage it goes through")
     func realDictationTimesEveryStage() async {
         let recorder = RecordingMetricsRecorder()
         let pipeline = makePipeline(
@@ -383,7 +384,8 @@ struct DictationPipelineRecoveryTests {
 
         #expect(state.insertedOutcome?.text == "Email me the PaymentSheet Kind regards, Naveen.")
         let measurements = await recorder.measurements
-        #expect(measurements.map(\.stage) == PipelineStage.allCases)
+        // Every stage but the drain, which only a dictation long enough to work ahead ever waits for.
+        #expect(measurements.map(\.stage) == PipelineStage.allCases.filter { $0 != .drain })
         #expect(
             measurements.allSatisfy { $0.succeeded && $0.duration > .zero },
             "every stage spent real time and none of it is missing")
