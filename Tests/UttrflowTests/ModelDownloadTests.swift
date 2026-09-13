@@ -11,9 +11,36 @@ import UttrflowSettings
 /// Counts how many times the weights were asked for, from whichever thread asked.
 private actor Asks {
     private(set) var count = 0
+    /// Every ask and release in the order they ran, so a test can see that one waited for the other.
+    private(set) var steps: [String] = []
 
     /// Records one ask, which is what the app's detached task does in place of the real download.
-    func asked() { count += 1 }
+    func asked() {
+        count += 1
+        steps.append("load")
+    }
+
+    /// Records one release of the weights.
+    func released() { steps.append("release") }
+}
+
+/// Holds a load open until the test lets it land, so a switch can be flipped while it is in flight.
+private actor Gate {
+    private var waiting: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    /// Waits until ``open()``.
+    func pass() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+
+    /// Lets every waiting load through.
+    func open() {
+        isOpen = true
+        waiting?.resume()
+        waiting = nil
+    }
 }
 
 /// What a hub that will not answer throws, which is the case the app used to swallow.
@@ -36,19 +63,74 @@ struct ModelDownloadTests {
         #expect(await asks.count == 0)
     }
 
-    @Test("Turning it on asks for them, and turning it off and on again does not ask twice.")
+    @Test("Turning it on asks for them once, and turning it off lets them go, so on again asks again.")
     func askedForOnceWhenWanted() async {
         let asks = Asks()
         let app = AppDelegate(container: Sandbox().root, prepareModel: { _ in await asks.asked() })
         app.settingsChanged(to: settings(suggesting: true))
-        let first = app.modelPreparation
-        await first?.value
-        #expect(await asks.count == 1)
-        app.settingsChanged(to: settings(suggesting: false))
+        await app.modelPreparation?.value
         app.settingsChanged(to: settings(suggesting: true))
-        #expect(app.modelPreparation == first)
         await app.modelPreparation?.value
         #expect(await asks.count == 1)
+        app.settingsChanged(to: settings(suggesting: false))
+        #expect(app.suggestionModel == .notAsked)
+        app.settingsChanged(to: settings(suggesting: true))
+        await app.modelPreparation?.value
+        #expect(await asks.count == 2)
+        #expect(app.suggestionModel == .ready)
+    }
+
+    @Test("Turning it off frees the weights it loaded, once.")
+    func turningOffReleases() async {
+        let asks = Asks()
+        let app = AppDelegate(
+            container: Sandbox().root, prepareModel: { _ in await asks.asked() },
+            releaseModel: { await asks.released() })
+        app.settingsChanged(to: settings(suggesting: false))
+        await app.modelPreparation?.value
+        #expect(await asks.steps.isEmpty)
+        app.settingsChanged(to: settings(suggesting: true))
+        app.settingsChanged(to: settings(suggesting: false))
+        app.settingsChanged(to: settings(suggesting: false))
+        await app.modelPreparation?.value
+        #expect(await asks.steps == ["load", "release"])
+    }
+
+    @Test("A load still running when the feature is turned off is freed when it lands, and never says ready.")
+    func aLoadInFlightIsFreedAfterItLands() async {
+        let asks = Asks()
+        let gate = Gate()
+        let app = AppDelegate(
+            container: Sandbox().root,
+            prepareModel: { _ in
+                await gate.pass()
+                await asks.asked()
+            },
+            releaseModel: { await asks.released() })
+        app.settingsChanged(to: settings(suggesting: true))
+        app.settingsChanged(to: settings(suggesting: false))
+        app.settingsChanged(to: settings(suggesting: true))
+        app.settingsChanged(to: settings(suggesting: false))
+        await gate.open()
+        await app.modelPreparation?.value
+        #expect(await asks.steps == ["load", "release", "load", "release"])
+        #expect(app.suggestionModel == .notAsked)
+    }
+
+    @Test("A failed load that lands after the feature was turned off does not report a failure.")
+    func aLateFailureIsQuiet() async {
+        let gate = Gate()
+        let app = AppDelegate(
+            container: Sandbox().root,
+            prepareModel: { _ in
+                await gate.pass()
+                throw HubRefused()
+            })
+        app.settingsChanged(to: settings(suggesting: true))
+        app.settingsChanged(to: settings(suggesting: false))
+        await gate.open()
+        await app.modelPreparation?.value
+        #expect(app.suggestionModel == .notAsked)
     }
 
     @Test("A fetch that failed is asked for again, rather than leaving the feature dead until a relaunch.")

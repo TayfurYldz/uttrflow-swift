@@ -166,7 +166,7 @@ to 12 GB in forty minutes of typing.
 `MLXCandidateScorer` — a generation, an alternatives pass, a score — empties it when the
 pass ends, however it ends. `MLXCleanupModel` does the same around a rewrite. So turning
 suggestions off or leaving the Mac idle leaves the weights and at most the capped cache —
-in practice nothing. The weights themselves stay loaded until the app quits.
+in practice nothing. Turning suggestions off also releases the weights — see [the memory budget](#the-memory-budget).
 
 Measured with `uttrflow-bakeoff gpu-memory` (Release, Gemma 3 4B QAT, 48 GB Apple silicon):
 forty passes over invented message threads of 120–310 words, every fourth pass cancelled
@@ -194,6 +194,58 @@ part-way, each followed by one score. The figures are MLX's own counters, in MB.
 - **Either half alone leaves memory behind.** A 1 GB cap without
   emptying held 1,024 MB after every run; emptying without a cap left 107 MB behind a
   cancelled pass. Both together are what the table shows.
+
+## The memory budget
+
+Uttrflow runs all day on Macs with far less memory than the one these figures came from, so
+what it holds is budgeted against the smallest Mac it supports: an 8 GB MacBook Air, where
+macOS and a browser already claim most of the memory before Uttrflow opens.
+
+### What holds memory, and when
+
+Measured on Release builds with `/usr/bin/time -l` and MLX's own counters, 48 GB Apple silicon,
+13 September 2026.
+
+| holder | loaded when | released when | cost |
+|---|---|---|---|
+| speech model, Whisper large-v3 turbo on CoreML | launch, `loadSpeechModel()` | quit | +114 MB footprint loaded, 267 MB peak footprint and 340 MB peak resident mid-dictation; the weights are file-mapped, so macOS can drop them itself |
+| suggestion model, Gemma 3 4B QAT on MLX | launch or the moment Suggestions is turned on, only for somebody who turned it on | Suggestions turned off, or quit | 2,485 MB of GPU memory, 3,036 MB at a pass's peak, 3,464 MB peak process footprint; anonymous, so nothing but a release frees it |
+| MLX's buffer cache | during a pass | the end of every pass | capped at 256 MB, 0 MB between passes |
+| the recording | the shortcut | the end of the dictation | at most 15 MB: 240 s at 16 kHz in 4-byte samples |
+| clipboard thumbnails | the panel is drawn | least recently used first | at most 32 MB, see `Docs/clipboard-budget.md` |
+| clipboard, history, dictionary and suggestion stores | launch | quit | under a megabyte of text each at measured sizes; the prediction corpus is SQLite on disk |
+
+Clean-up runs in Apple's model process, not this one, and is not counted here.
+
+### The budget
+
+| state | 8 GB Mac | 16 GB Mac and up |
+|---|---|---|
+| idle, suggestions off | **≤ 300 MB** footprint | ≤ 300 MB |
+| peak during a dictation, suggestions off | **≤ 400 MB** | ≤ 400 MB |
+| suggestions on, between passes | ≤ 3.0 GB, and none of it under memory pressure | ≤ 3.0 GB |
+| suggestions on, peak of a pass | ≤ 3.5 GB | ≤ 3.5 GB |
+| after turning suggestions off | back to the idle line within a second | same |
+
+The speech model fits inside the first two lines with room to spare, and it stays loaded:
+reloading costs the next dictation 2–9 s, and about 150 s on the first load after a reboot
+(`Docs/startup.md`), while its file-backed weights are exactly the memory macOS already
+reclaims on its own.
+
+The suggestion model is what the budget is about. On an 8 GB Mac its 3 GB is close to half of
+all memory, which is why nothing loads it for somebody who never asked, and why turning the
+feature off gives it back. `AppDelegate` releases it when the switch goes off, after any load
+still running has landed, and `MLXCandidateScorer.release()` drops the weights, the warmed
+instructions and the vocabulary and empties MLX's cache. Measured with
+`uttrflow-bakeoff gpu-memory --release`:
+
+| | MLX active | process footprint |
+|---|---|---|
+| loaded, after six passes and 5 s idle | 2,485 MB | 2,677 MB |
+| one second after `release()` | 0 MB | 190 MB |
+
+MLX holds no active memory after the release; the 190 MB left is the process with MLX and Metal initialised and has not been broken down further. Turning the
+feature back on loads the weights again from disk in about 3 s.
 
 ## Processor
 

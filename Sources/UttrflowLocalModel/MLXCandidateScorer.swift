@@ -59,6 +59,14 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing {
         }
     }
 
+    /// Drops the weights and everything read from them, and hands the freed GPU buffers back to the system.
+    public func release() {
+        container = nil
+        warm = nil
+        vocabulary = nil
+        bufferCache.clear()
+    }
+
     /// The instructions as the model has already read them, so a pass pays only for the moment's own tokens.
     private var warm: WarmInstructions?
 

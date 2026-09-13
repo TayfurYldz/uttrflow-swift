@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import UttrflowEval
 import UttrflowLocalModel
 import UttrflowPredict
 
@@ -15,6 +16,9 @@ struct GPUMemory: AsyncParsableCommand {
 
     @Option(name: .long, help: "Cancel every Nth pass part-way through; 0 cancels none.")
     var cancelEvery = 4
+
+    @Flag(name: .long, help: "Release the model after the idle reading and report what is left.")
+    var release = false
 
     @Option(name: .long, help: "Which model to run, by repository or short name.")
     var model = LocalModel.gemma3.identifier
@@ -42,7 +46,12 @@ struct GPUMemory: AsyncParsableCommand {
             print("\(label)  \(Self.row(GPUBufferCache.reading))")
         }
         try? await Task.sleep(for: .seconds(5))
-        print("idle 5 s                  \(Self.row(GPUBufferCache.reading))")
+        print("idle 5 s                  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())")
+        if release {
+            await scorer.release()
+            try? await Task.sleep(for: .seconds(1))
+            print("released                  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())")
+        }
         let sorted = times.sorted()
         guard !sorted.isEmpty else { return }
         print(
@@ -66,6 +75,11 @@ struct GPUMemory: AsyncParsableCommand {
         _ = try? await work.value
         _ = await scorer.judgedTokens(of: typed + thread(words: 4 + pass % 23), following: typed)
         return Int((ContinuousClock.now - started) / .milliseconds(1))
+    }
+
+    /// The process's footprint, which is what Activity Monitor shows.
+    private static func footprint() -> String {
+        "footprint \(String((MemoryFootprint.current() ?? 0) / 1_048_576).leftPadded(to: 6)) MB"
     }
 
     /// Active, cache and peak memory in megabytes, in fixed columns.
