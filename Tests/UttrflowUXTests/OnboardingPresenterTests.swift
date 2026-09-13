@@ -307,6 +307,14 @@ struct OnboardingPresenterTests {
         #expect(OnboardingKeys.of(unusual) == ["⌘", "Key 7"])
     }
 
+    /// Issue 353: a chord of modifiers drew its key as a raw code, and a held Fn as "Key 63".
+    @Test("draws a shortcut made of modifiers, or a held Fn, the way Settings does")
+    func heldKeysMatchSettings() {
+        let chord = HotkeyBinding(keyCode: 58, modifiers: [.option, .command, .control])
+        #expect(OnboardingKeys.of(chord) == ["⌃", "⌥", "⌘"])
+        #expect(OnboardingKeys.of(.functionHold) == ["fn"])
+    }
+
     @Test("names the keys a shortcut is realistically bound to")
     func theNamedKeys() {
         let named = [36: "Return", 48: "Tab", 49: "Space", 51: "Delete", 53: "Escape"]

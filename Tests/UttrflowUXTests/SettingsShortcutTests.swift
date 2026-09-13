@@ -38,6 +38,42 @@ struct SettingsShortcutDrawingTests {
         #expect(SettingsShortcut.keycaps(for: .optionSpace) == ["⌥", "Space"])
     }
 
+    /// A chord of modifiers stored under one of its own keys, and the caps it draws as.
+    struct ModifierChord: Sendable, CustomTestStringConvertible {
+        let keyCode: UInt16
+        let modifiers: Set<HotkeyModifier>
+        let drawn: [String]
+        var testDescription: String { "key \(keyCode) drawn as \(drawn.joined())" }
+    }
+
+    static let modifierChords: [ModifierChord] = [
+        ModifierChord(keyCode: 58, modifiers: [.option, .command, .control], drawn: ["⌃", "⌥", "⌘"]),
+        ModifierChord(keyCode: 61, modifiers: [.option, .control], drawn: ["⌃", "⌥"]),
+        ModifierChord(keyCode: 55, modifiers: [.command, .shift], drawn: ["⇧", "⌘"]),
+        ModifierChord(
+            keyCode: 54, modifiers: [.command, .option, .shift, .control], drawn: ["⌃", "⌥", "⇧", "⌘"]),
+        ModifierChord(keyCode: 59, modifiers: [.control, .option], drawn: ["⌃", "⌥"]),
+        ModifierChord(keyCode: 62, modifiers: [.control, .command], drawn: ["⌃", "⌘"]),
+        ModifierChord(keyCode: 56, modifiers: [.shift, .option], drawn: ["⌥", "⇧"]),
+        ModifierChord(keyCode: 60, modifiers: [.shift, .control], drawn: ["⌃", "⇧"]),
+    ]
+
+    /// Issue 353: a chord of modifiers drew only the key it was stored under, so ⌃⌥⌘ read as ⌥.
+    @Test(
+        "draws every modifier of a chord made only of modifiers, each once and in order",
+        arguments: modifierChords)
+    func drawsAModifierChord(chord: ModifierChord) {
+        let binding = HotkeyBinding(keyCode: chord.keyCode, modifiers: chord.modifiers)
+        #expect(SettingsShortcut.keycaps(for: binding) == chord.drawn)
+        #expect(SettingsShortcut.compact(binding) == chord.drawn.joined())
+    }
+
+    @Test("draws a chord's key modifier even when the stored set leaves it out")
+    func drawsTheKeysOwnModifier() {
+        let binding = HotkeyBinding(keyCode: 58, modifiers: [.control, .command])
+        #expect(SettingsShortcut.keycaps(for: binding) == ["⌃", "⌥", "⌘"])
+    }
+
     @Test("shows a key it has no name for as its code rather than as nothing")
     func namesTheUnnameable() {
         #expect(SettingsShortcut.name(of: 200) == "Key 200")

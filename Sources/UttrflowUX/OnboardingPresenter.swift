@@ -421,7 +421,9 @@ private struct PermissionWording {
 enum OnboardingKeys {
     /// Modifiers in the order macOS draws them, then the key itself.
     static func of(_ binding: HotkeyBinding) -> [String] {
-        SettingsShortcut.modifierCaps(for: binding) + [name(for: binding.keyCode)]
+        // A key that is itself a modifier, or Fn, is drawn exactly as Settings draws it.
+        guard binding.heldModifier == nil else { return SettingsShortcut.keycaps(for: binding) }
+        return SettingsShortcut.modifierCaps(for: binding) + [name(for: binding.keyCode)]
     }
 
     /// The keys a shortcut is realistically bound to; a key code becomes a letter only through the layout.
