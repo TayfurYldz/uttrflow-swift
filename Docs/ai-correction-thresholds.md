@@ -76,10 +76,11 @@ correctly usually has the evidence on its side.
 ## Cost
 
 Ten thousand entries, a forty-word utterance with half the words doubted and a screenful of
-selected text: about half a millisecond per dictation on an M-series Mac. The test asserts
-under 25 ms, far above the measurement on purpose: a wall clock in a parallel test suite is
-noisy, and 25 ms is still a hundredth of the dictation budget and two orders below one
-on-device model call, so the test fails only if somebody puts a model call there.
+selected text: about half a millisecond per dictation on an M-series Mac. The test does not
+time it, because a wall clock in a parallel suite on a loaded machine fails with nothing wrong.
+It counts instead: the dictionary entries the lookups read are the same over ten thousand
+entries as over fifty, and the screen is read once per utterance however many runs are
+doubted. A lookup that scanned the dictionary, or evidence rebuilt per run, fails it.
 
 ## The restraint corpus
 

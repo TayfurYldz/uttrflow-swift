@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UttrflowTestSupport
 
 @testable import UttrflowPredict
 
@@ -32,11 +33,11 @@ private func requested(
 private func drawVerified(
     _ session: inout SuggestionSession, typing typed: String, candidates: [Candidate],
     machine: [EnvironmentKind: [String]] = [:], scoring: (any CandidateScoring)? = nil,
-    supersession: (any SupersessionRecording)? = nil, elapsed: Int = 0
+    supersession: (any SupersessionRecording)? = nil, elapsed: Int = 0, clock: ManualClock = ManualClock()
 ) async throws -> SuggestionUpdate? {
     let request = try requested(&session, typing: typed, candidates: candidates)
     let verifier = await warmed(
-        machine, on: candidates[0].text, scoring: scoring, supersession: supersession)
+        machine, on: candidates[0].text, scoring: scoring, supersession: supersession, clock: clock)
     let allowed = await verifier.verified(
         request.candidates, in: request.surface, typed: request.typed, now: moment)
     return session.resolve(allowed, for: request, now: moment, elapsedMilliseconds: elapsed)
@@ -140,10 +141,11 @@ struct SuggestionVerificationBudgetTests {
     @Test("Past its budget the gates draw only what the machine had already attested.")
     func pastTheBudgetOnlyAttestationIsDrawn() async throws {
         var session = SuggestionSession()
-        let slow = ScriptedScoring(liked, delay: .seconds(1))
+        let clock = ManualClock()
+        let slow = ScriptedScoring(liked, overrunning: clock)
         let update = try await drawVerified(
             &session, typing: "git c", candidates: [habit("git cm"), habit("git czqxjw", count: 30)],
-            machine: [.gitAlias: ["cm"], .subcommand(of: "git"): ["cm"]], scoring: slow)
+            machine: [.gitAlias: ["cm"], .subcommand(of: "git"): ["cm"]], scoring: slow, clock: clock)
         #expect(update?.suggestion == .certain("git cm"))
         #expect(await slow.asked == 1)
     }
@@ -151,9 +153,10 @@ struct SuggestionVerificationBudgetTests {
     @Test("A model still loading is never waited on, so the statistical tiers draw alone.")
     func aLoadingModelIsNeverWaitedOn() async throws {
         var session = SuggestionSession()
-        let loading = ScriptedScoring(disliked, loaded: false, delay: .seconds(1))
+        let clock = ManualClock()
+        let loading = ScriptedScoring(disliked, loaded: false, overrunning: clock)
         let update = try await drawVerified(
-            &session, typing: "git z", candidates: [habit("git zqxjw")], scoring: loading)
+            &session, typing: "git z", candidates: [habit("git zqxjw")], scoring: loading, clock: clock)
         #expect(update?.suggestion == .certain("git zqxjw"))
         #expect(await loading.asked == 0)
     }

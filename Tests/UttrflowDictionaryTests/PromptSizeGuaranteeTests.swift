@@ -2,6 +2,7 @@
 
 import Foundation
 import Testing
+import UttrflowCore
 
 @testable import UttrflowDictionary
 
@@ -76,35 +77,24 @@ struct PromptSizeGuaranteeTests {
             """)
     }
 
-    /// The same, timed; a scan shows up as a factor of thousands, so the tolerance is loose on purpose.
-    @Test("takes no longer to look a word up in fifty thousand than in ten")
+    /// The same, counted: a scan reads every entry, so it shows as thousands where a probe reads a handful.
+    @Test("reads no more entries to look a word up in fifty thousand than in ten")
     func lookupTimeDoesNotGrow() {
         let small = PhoneticIndex(entries: real)
         let large = PhoneticIndex(entries: real + filler(49_990))
-        let repetitions = 2_000
 
-        func time(_ index: PhoneticIndex) -> Duration {
-            // One untimed pass so that neither measurement pays for a cold cache.
-            _ = index.candidates(for: utterance)
-            return ContinuousClock().measure {
-                for _ in 0..<repetitions { _ = index.candidates(for: utterance) }
-            }
+        func entriesRead(_ index: PhoneticIndex) -> Int {
+            let tally = WorkTally()
+            PhoneticIndex.$entriesRead.withValue(tally) { _ = index.candidates(for: utterance) }
+            return tally.count
         }
 
-        let overTen = time(small)
-        let overFiftyThousand = time(large)
-        let ratio =
-            Double(overFiftyThousand.components.attoseconds)
-            / Double(max(1, overTen.components.attoseconds))
+        let overTen = entriesRead(small)
+        let overFiftyThousand = entriesRead(large)
+        print("GUARANTEE  entries read over 10: \(overTen), over 50,000: \(overFiftyThousand)")
 
-        print(
-            """
-            GUARANTEE  \(repetitions) lookups over 10 entries: \(overTen)
-            GUARANTEE  \(repetitions) lookups over 50,000 entries: \(overFiftyThousand)
-            GUARANTEE  ratio: \(String(format: "%.2f", ratio))×
-            """)
-
-        #expect(overFiftyThousand < overTen * 5 + .milliseconds(20))
+        #expect(overTen > 0, "the lookup found the user's words, so reading was counted")
+        #expect(overFiftyThousand == overTen)
     }
 
     /// Building the index costs the dictionary once; querying it never does.

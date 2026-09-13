@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UttrflowTestSupport
 
 @testable import UttrflowPredict
 
@@ -12,7 +13,8 @@ let disliked = Verification.plausibilityFloor - 1
 /// A verifier over a machine that has already answered, since the first ask only starts the read.
 func warmed(
     _ machine: [EnvironmentKind: [String]], on text: String, in surface: Surface = terminal,
-    scoring: (any CandidateScoring)? = nil, supersession: (any SupersessionRecording)? = nil
+    scoring: (any CandidateScoring)? = nil, supersession: (any SupersessionRecording)? = nil,
+    clock: ManualClock = ManualClock()
 ) async -> Verifier {
     let index = EnvironmentIndex(reader: StubEnvironment(machine))
     if let token = CompletionToken(text), let directory = EnvironmentSource.workingDirectory(of: surface) {
@@ -21,19 +23,20 @@ func warmed(
         }
         await index.settle()
     }
-    // A tight budget, so a scorer that sleeps a second is over it without the test waiting one out.
+    // On a clock only a slow scorer moves, so a prompt one is never over budget however loaded the machine.
     return Verifier(
-        index: index, scoring: scoring, supersession: supersession, budgetInMilliseconds: 200)
+        index: index, scoring: scoring, supersession: supersession, budgetInMilliseconds: 200,
+        clock: clock)
 }
 
 /// What the gates decide about one candidate on a machine that has already answered.
 func decided(
     _ text: String, typed: String = "", machine: [EnvironmentKind: [String]] = [:],
     scoring: (any CandidateScoring)? = nil, supersession: (any SupersessionRecording)? = nil,
-    in surface: Surface = terminal
+    in surface: Surface = terminal, clock: ManualClock = ManualClock()
 ) async -> Verdict {
     let verifier = await warmed(
-        machine, on: text, in: surface, scoring: scoring, supersession: supersession)
+        machine, on: text, in: surface, scoring: scoring, supersession: supersession, clock: clock)
     return await verifier.verdict(
         for: Candidate(text: text, source: .personal), in: surface, typed: typed, now: moment)
 }
@@ -103,23 +106,26 @@ struct VerifierTests {
 
     @Test("A verification past its budget shows nothing the machine had not already attested.")
     func pastTheBudgetOnlyAttestationCounts() async {
-        let slow = ScriptedScoring(liked, delay: .seconds(1))
-        #expect(await decided("git zqxjw", typed: "git z", scoring: slow) == .rejected)
+        let clock = ManualClock()
+        let slow = ScriptedScoring(liked, overrunning: clock)
+        #expect(await decided("git zqxjw", typed: "git z", scoring: slow, clock: clock) == .rejected)
     }
 
     @Test("A candidate the machine attested is answered before the model is asked at all.")
     func attestationRunsBeforeTheModel() async {
-        let slow = ScriptedScoring(disliked, delay: .seconds(1))
+        let clock = ManualClock()
+        let slow = ScriptedScoring(disliked, overrunning: clock)
         let verdict = await decided(
-            "git cm", typed: "git c", machine: [.gitAlias: ["cm"]], scoring: slow)
+            "git cm", typed: "git c", machine: [.gitAlias: ["cm"]], scoring: slow, clock: clock)
         #expect(verdict == .attested)
         #expect(await slow.asked == 0)
     }
 
     @Test("A verdict past its budget is not remembered, so the next keystroke may ask again.")
     func aMissedBudgetIsNotRemembered() async {
-        let slow = ScriptedScoring(liked, delay: .seconds(1))
-        let verifier = await warmed([:], on: "git zqxjw", scoring: slow)
+        let clock = ManualClock()
+        let slow = ScriptedScoring(liked, overrunning: clock)
+        let verifier = await warmed([:], on: "git zqxjw", scoring: slow, clock: clock)
         let candidate = Candidate(text: "git zqxjw", source: .personal)
         _ = await verifier.verdict(for: candidate, in: terminal, typed: "git z", now: moment)
         #expect(await verifier.rememberedCount == 0)
@@ -209,8 +215,9 @@ struct VerifiedCandidateTests {
 
     @Test("One keystroke's budget is shared across every candidate rather than spent once each.")
     func theBudgetIsSharedAcrossTheSet() async {
-        let slow = ScriptedScoring(liked, delay: .seconds(1))
-        let verifier = await warmed([:], on: "git zqxjw", scoring: slow)
+        let clock = ManualClock()
+        let slow = ScriptedScoring(liked, overrunning: clock)
+        let verifier = await warmed([:], on: "git zqxjw", scoring: slow, clock: clock)
         let offered = await verifier.verified(
             [
                 Candidate(text: "git zqxjw", source: .personal),

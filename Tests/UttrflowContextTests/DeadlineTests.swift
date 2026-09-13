@@ -1,3 +1,4 @@
+import Synchronization
 import Testing
 
 @testable import UttrflowContext
@@ -9,8 +10,10 @@ private let lateBySeconds = 30
 struct DeadlineTests {
     @Test("An answer that arrives in time is the answer.")
     func promptAnswersAreKept() async {
-        let answer = await Deadline.first(within: .milliseconds(500)) { "here" }
+        let clock = PatientClock()
+        let answer = await Deadline.first(within: .milliseconds(500), on: clock) { "here" }
         #expect(answer == "here")
+        #expect(clock.ranOut == false, "the answer was waited out rather than taken")
     }
 
     @Test("An answer that does not arrive in time is nothing, and the race did not wait for it.")
@@ -29,17 +32,21 @@ struct DeadlineTests {
 
     @Test("Work that answers nothing is nothing, promptly.")
     func nothingIsNothing() async {
-        let answer: String? = await Deadline.first(within: .milliseconds(500)) { nil }
+        let clock = PatientClock()
+        let answer: String? = await Deadline.first(within: .milliseconds(500), on: clock) { nil }
         #expect(answer == nil)
+        #expect(clock.ranOut == false, "nothing was waited out rather than taken")
     }
 
     @Test("An answer that takes a while but arrives inside the allowance is still the answer.")
     func slowButTimelyAnswersAreKept() async {
-        let answer = await Deadline.first(within: .milliseconds(800)) {
+        let clock = PatientClock()
+        let answer = await Deadline.first(within: .milliseconds(800), on: clock) {
             try? await Task.sleep(for: .milliseconds(20))
             return "here"
         }
         #expect(answer == "here")
+        #expect(clock.ranOut == false, "the answer was waited out rather than taken")
     }
 
     @Test(
@@ -88,12 +95,7 @@ struct DeadlineTests {
             return "late"
         }
         #expect(answer == nil)
-        var woke: Bool?
-        for _ in 0..<200 where woke == nil {
-            woke = await witness.cancelledWhenWoken
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-        #expect(woke == true)
+        #expect(await witness.wakes() == true)
         #expect(await witness.didFinish == false)
     }
 }
@@ -102,7 +104,39 @@ struct DeadlineTests {
 private actor Witness {
     var cancelledWhenWoken: Bool?
     var didFinish = false
+    private var waitingToWake: [CheckedContinuation<Bool, Never>] = []
 
-    func woke(cancelled: Bool) { cancelledWhenWoken = cancelled }
+    func woke(cancelled: Bool) {
+        cancelledWhenWoken = cancelled
+        for waiting in waitingToWake { waiting.resume(returning: cancelled) }
+        waitingToWake = []
+    }
+
     func finished() { didFinish = true }
+
+    /// Suspends until the losing work wakes, and answers whether it found itself cancelled.
+    func wakes() async -> Bool {
+        if let cancelledWhenWoken { return cancelledWhenWoken }
+        return await withCheckedContinuation { waitingToWake.append($0) }
+    }
+}
+
+/// A clock for the in-time cases: its sleeps end only when cancelled, or at a real ceiling it then reports reaching.
+private final class PatientClock: Clock, Sendable {
+    typealias Instant = ContinuousClock.Instant
+
+    /// Far past any answer in these tests, so reaching it means the race waited instead of taking the answer.
+    private static let ceiling = Duration.seconds(30)
+    private let reachedCeiling = Mutex(false)
+
+    var now: Instant { .now }
+    var minimumResolution: Duration { .nanoseconds(1) }
+
+    /// Whether any sleep ran to the ceiling rather than being cancelled.
+    var ranOut: Bool { reachedCeiling.withLock { $0 } }
+
+    func sleep(until deadline: Instant, tolerance: Duration?) async throws {
+        try await Task.sleep(for: Self.ceiling)
+        reachedCeiling.withLock { $0 = true }
+    }
 }
