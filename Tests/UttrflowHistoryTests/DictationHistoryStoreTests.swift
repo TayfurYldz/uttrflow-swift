@@ -301,14 +301,15 @@ struct DictationHistoryStoreTests {
         #expect(await DictationHistoryStore(file: sandbox.file).records(keeping: week).isEmpty)
     }
 
-    /// There is nothing readable to preserve, but the next dictation must still be kept.
-    @Test("a mangled file is written over rather than making the store useless")
+    /// The next dictation is kept, and the mangled bytes are set aside rather than written over.
+    @Test("a mangled file is set aside rather than making the store useless")
     func corruptFileIsRecoveredFrom() async throws {
         let sandbox = Sandbox()
         try sandbox.seed(Data("nonsense, entirely".utf8))
         let store = DictationHistoryStore(file: sandbox.file)
         #expect(try await store.append(spoken("Now."), keeping: week).map(\.text) == ["Now."])
         #expect(sandbox.onDisk()?.map(\.text) == ["Now."])
+        #expect(try setAsideBytes(of: sandbox.file) == Data("nonsense, entirely".utf8))
     }
 
     // MARK: A disk that says no
@@ -536,4 +537,12 @@ struct DictationHistoryStoreTests {
         #expect(kept.count == 40)
         #expect(Set(kept.map(\.text)).count == 40)
     }
+}
+
+/// The bytes of the file set aside beside `file` after it could not be read.
+private func setAsideBytes(of file: URL) throws -> Data {
+    let folder = file.deletingLastPathComponent()
+    let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    let aside = try #require(names.first { $0.hasPrefix(file.lastPathComponent + ".unreadable-") })
+    return try Data(contentsOf: folder.appending(path: aside))
 }

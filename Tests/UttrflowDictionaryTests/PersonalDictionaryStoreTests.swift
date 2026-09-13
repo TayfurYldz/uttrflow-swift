@@ -311,7 +311,7 @@ struct PersonalDictionaryStoreTests {
     }
 
     /// Absent, truncated or hand-edited all mean the same thing to a user: the app should open.
-    @Test("degrades a mangled file to an empty dictionary and writes over it")
+    @Test("degrades a mangled file to an empty dictionary and sets the mangled bytes aside")
     func corruptFile() async throws {
         let sandbox = Sandbox()
         try sandbox.seed(Data("nonsense, entirely".utf8))
@@ -320,6 +320,7 @@ struct PersonalDictionaryStoreTests {
         #expect(await store.allEntries().isEmpty)
         #expect(try await store.add(word("Uttrflow", from: .added)).map(\.word) == ["Uttrflow"])
         #expect(sandbox.onDisk()?.map(\.word) == ["Uttrflow"])
+        #expect(try setAsideBytes(of: sandbox.file) == Data("nonsense, entirely".utf8))
     }
 
     // MARK: A disk that says no
@@ -405,4 +406,12 @@ struct DictionaryStoreErrorTests {
         #expect(DictionaryStoreError.firstCase.caseAfter == .wordIsEmpty)
         #expect(DictionaryStoreError.wordAlreadyKnown.caseAfter == nil)
     }
+}
+
+/// The bytes of the file set aside beside `file` after it could not be read.
+private func setAsideBytes(of file: URL) throws -> Data {
+    let folder = file.deletingLastPathComponent()
+    let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    let aside = try #require(names.first { $0.hasPrefix(file.lastPathComponent + ".unreadable-") })
+    return try Data(contentsOf: folder.appending(path: aside))
 }

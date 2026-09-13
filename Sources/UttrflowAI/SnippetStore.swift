@@ -5,7 +5,6 @@ public import struct Foundation.UUID
 
 public import struct Foundation.Data
 public import class Foundation.FileManager
-public import class Foundation.JSONDecoder
 public import class Foundation.JSONEncoder
 
 /// The user's snippets, in their own file on this Mac. See `Docs/ai-snippet-store.md`.
@@ -106,12 +105,9 @@ public actor SnippetStore {
 
     // MARK: - The file
 
-    /// Reads the file, answering with nothing when there is nothing readable there.
+    /// Reads the file, setting an unreadable one aside so the next write cannot replace the only copy.
     private func load() -> [Snippet] {
-        guard let data = try? Data(contentsOf: file),
-            let snippets = try? JSONDecoder().decode([Snippet].self, from: data)
-        else { return [] }
-        return snippets
+        LocalStore.read([Snippet].self, from: file).value ?? []
     }
 
     /// Writes the whole list atomically, or removes the file when nothing is left to keep.

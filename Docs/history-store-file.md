@@ -75,7 +75,9 @@ Absent, unreadable, truncated, hand-edited, or written by a build that knew a di
 shape — to a user those all mean the same thing, which is that the app should still open, so
 `load()` answers with nothing. Salvaging record by record is not attempted: the store's own
 writes are atomic, so the realistic corruption is a whole file somebody mangled, and half a
-history restored is harder to explain than none.
+history restored is harder to explain than none. The unreadable file is renamed aside first
+(`history.v1.json.unreadable-<seconds since 1970>`, by `LocalStore.read(_:from:)`), so the next
+dictation starts a fresh file rather than writing over the only copy of the old one.
 
 Writes are atomic, so a crash or a full disk cannot leave behind the truncated file `load()`
 would then have to throw away. An empty list removes the file rather than writing `[]`, so an

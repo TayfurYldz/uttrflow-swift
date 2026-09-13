@@ -63,5 +63,6 @@ dictation with no expansions in it must not rewrite the file.
 ## Reading and writing the file
 
 Identical in shape and in reasoning to the history store's, and described there: a file that
-cannot be read answers as empty rather than refusing to open the app, writes are atomic, and
-an emptied list removes the file rather than writing `[]`.
+cannot be read answers as empty rather than refusing to open the app and is renamed aside so the
+next save cannot write over it, writes are atomic, and an emptied list removes the file rather than
+writing `[]`.

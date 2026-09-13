@@ -9,7 +9,6 @@ public import struct Foundation.UUID
 
 public import struct Foundation.Data
 public import class Foundation.FileManager
-public import class Foundation.JSONDecoder
 public import class Foundation.JSONEncoder
 
 /// Everything the user has copied, kept on this Mac between launches. See `Docs/clipboard-store.md`.
@@ -31,6 +30,12 @@ public actor ClipboardStore {
 
     /// Whether this process has already reconciled the pictures folder; see ``sweepOnce(against:)``.
     private var hasSwept = false
+
+    /// Whether a file this process read was there and could not be read, so its pictures are unknown.
+    private var hasUnreadableIndex = false
+
+    /// Files that could not be read or moved aside, which no write may replace.
+    private var unreplaceable: Set<URL> = []
 
     public init(
         file: URL = ClipboardStore.defaultFile(),
@@ -219,6 +224,7 @@ public actor ClipboardStore {
 
     /// Deletes pictures no clip refers to any more; best-effort, so a stuck file cannot cost a write.
     public func forgetOrphanedImages() {
+        guard indexesAreTrustworthy else { return }
         let wanted = Set(loaded().compactMap(\.image?.file))
         let onDisk =
             (try? FileManager.default.contentsOfDirectory(
@@ -421,17 +427,24 @@ public actor ClipboardStore {
     /// Reconciles the pictures folder once a launch, catching orphans no write of ours can notice.
     private func sweepOnce(against clips: [Clip]) {
         // An empty list is what a bad read looks like too, so sweeping on one would delete everything.
-        guard !hasSwept, !clips.isEmpty else { return }
+        guard !hasSwept, !clips.isEmpty, indexesAreTrustworthy else { return }
         hasSwept = true
         forgetOrphanedImages()
     }
 
-    /// Reads one file, answering with nothing when there is nothing readable there.
+    /// Whether every file that can name a picture was read, so a file named by neither is an orphan.
+    private var indexesAreTrustworthy: Bool {
+        !hasUnreadableIndex && !LocalStore.hasSetAside(file) && !LocalStore.hasSetAside(savedFile)
+    }
+
+    /// Reads one file, setting an unreadable one aside and remembering that its pictures are unknown.
     private func read(_ url: URL) -> [Clip] {
-        guard let data = try? Data(contentsOf: url),
-            let clips = try? JSONDecoder().decode([Clip].self, from: data)
-        else { return [] }
-        return clips
+        let stored = LocalStore.read([Clip].self, from: url)
+        if case .unreadable(let setAside) = stored {
+            hasUnreadableIndex = true
+            if setAside == nil { unreplaceable.insert(url) }
+        }
+        return stored.value ?? []
     }
 
     /// Writes the list to memory and then to disk, filing each clip by what ``Clip/isKept`` says.
@@ -451,14 +464,17 @@ public actor ClipboardStore {
         }
         try persist(nowHistory, to: file)
 
-        // Only when a file stops being referenced, so a text copy never pays for a directory scan.
-        if !before.subtracting(Set(clips.compactMap(\.image?.file))).isEmpty {
-            forgetOrphanedImages()
+        // Only the files that stopped being referenced, so a picture no read could vouch for is never touched.
+        for name in before.subtracting(Set(clips.compactMap(\.image?.file))) {
+            try? FileManager.default.removeItem(
+                at: imagesFolder.appending(path: name, directoryHint: .notDirectory))
         }
     }
 
     /// Writes a whole list atomically, or removes its file when nothing is left to keep.
     private func persist(_ clips: [Clip], to url: URL) throws(ClipboardStoreError) {
+        // A file that could be neither read nor moved aside is the user's only copy, so it is not replaced.
+        guard !unreplaceable.contains(url) else { throw .couldNotWrite }
         do {
             guard !clips.isEmpty else {
                 try removeFile(url)
