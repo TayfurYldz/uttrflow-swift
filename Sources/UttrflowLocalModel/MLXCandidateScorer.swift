@@ -52,6 +52,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     /// Loads the weights from disk when they are whole there, downloading them only when they are not.
     public func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         guard container == nil else { return }
+        // The instruction warm-up is a pass like any other, so it is held to the cap and leaves nothing cached.
+        bufferCache.hold()
+        defer { bufferCache.clear() }
         let directory = try await model.weightsDirectory(
             cache: cache, downloader: { #hubDownloader() }, onProgress: onProgress)
         container = try await loadModelContainer(from: directory, using: #huggingFaceTokenizerLoader())
