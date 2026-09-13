@@ -32,8 +32,8 @@ struct SentenceLocalityTests {
         ("ContractionsPass", ContractionsPass()), ("SpacingPass", SpacingPass()),
     ]
 
-    /// The pass and sentence of issue #254, where "is this phrase first" is asked of the text; it may shrink, never grow.
-    static let readsTheTextNotTheSentence = [("LayoutWordsPass", "number one is broken")]
+    /// Passes and sentences that ask "is this phrase first" of the text rather than the sentence; empty since #254, and it may never grow.
+    static let readsTheTextNotTheSentence: [(String, String)] = []
 
     /// A mark said by name is written onto the word before it even across a stop, the recogniser's boundary being a guess and the spoken mark an instruction.
     static func attachesBackwards(_ body: String) -> Bool {
@@ -72,14 +72,14 @@ struct SentenceLocalityTests {
             ])
     }
 
-    /// A known defect stays known: it must still fail, or its entry is stale and goes.
-    @Test("the case issue #254 owns still reads the text rather than the sentence")
-    func theKnownCaseStillFails() {
-        #expect(Self.readsTheTextNotTheSentence.count == 1)
+    /// Issue 254: the words "number one" were deleted for a marker only because a sentence came before them.
+    @Test("a layout phrase opening its sentence is read the same after a sentence as at the head of the text")
+    func theLayoutPhraseReadsItsSentence() {
+        #expect(Self.readsTheTextNotTheSentence.isEmpty)
         let pass = LayoutWordsPass()
         #expect(cleaned("number one is broken", by: pass) == "number one is broken")
         #expect(
             cleaned("the build failed. number one is broken", by: pass)
-                != "the build failed. number one is broken")
+                == "the build failed. number one is broken")
     }
 }

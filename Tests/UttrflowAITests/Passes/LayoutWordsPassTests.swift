@@ -34,6 +34,23 @@ struct LayoutWordsPassTests {
         #expect(cleaned(input, by: sut) == expected)
     }
 
+    /// Issue 254: with no lookback to ask, a phrase opening its sentence is an item only if the speaker set it off.
+    @Test(
+        "reads a phrase opening its sentence as layout only when a mark sets it off",
+        arguments: [
+            ("the build failed. number one is broken", "the build failed. number one is broken"),
+            ("here is the plan. number one, fix the build", "here is the plan.\n1. fix the build"),
+            ("number one, fix the build", "1. fix the build"),
+            ("bullet point, the milk", "- the milk"),
+            ("we shipped. bullet point, the milk", "we shipped.\n- the milk"),
+            // A break at the head of the text has nothing to break from, so the words stay.
+            ("new line, hello there", "new line, hello there"),
+        ]
+    )
+    func readsTheSentenceNotTheText(input: String, expected: String) {
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
     /// One spoken phrase cannot straddle a sentence end, so neither the phrase nor the item number reaches past one.
     @Test(
         "reads neither a layout phrase nor an item number across a sentence end",
