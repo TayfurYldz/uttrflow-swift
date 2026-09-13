@@ -29,6 +29,8 @@ public struct HomePresentation: Sendable, Equatable {
     public let status: HomeStatus
     /// Who is signed in, and the way to the page about them; always present.
     public let account: HomeAccount
+    /// The speech model loading, or failed to; absent once it can transcribe.
+    public let speechModel: HomeSpeechModelNotice?
 
     /// Builds a page from its parts.
     public init(
@@ -42,7 +44,8 @@ public struct HomePresentation: Sendable, Equatable {
         hint: HomeHint,
         demonstration: HomeDemonstration?,
         status: HomeStatus,
-        account: HomeAccount
+        account: HomeAccount,
+        speechModel: HomeSpeechModelNotice? = nil
     ) {
         self.greeting = greeting
         self.subtitle = subtitle
@@ -55,6 +58,32 @@ public struct HomePresentation: Sendable, Equatable {
         self.demonstration = demonstration
         self.status = status
         self.account = account
+        self.speechModel = speechModel
+    }
+}
+
+/// The card saying the speech model is loading or did not, drawn from the one load every surface reads.
+public struct HomeSpeechModelNotice: Sendable, Equatable {
+    /// The heading.
+    public let title: String
+    /// The sentence under it, with the estimate only once the load has run long enough to need one.
+    public let message: String
+    /// Whether the load is still going, so a spinner is drawn rather than a warning.
+    public let isLoading: Bool
+    /// Another attempt, offered only when the load failed.
+    public let action: MainAction?
+    /// What VoiceOver reads for the card as a whole.
+    public let accessibilityLabel: String
+
+    /// Builds the notice for a load.
+    public init(_ load: SpeechModelLoad) {
+        title = load.title
+        message = load.message
+        isLoading = load.isLoading
+        action = load.recovery.map {
+            MainAction(title: MainPresenter.title(for: $0), intent: .recover($0))
+        }
+        accessibilityLabel = load.accessibilityLabel
     }
 }
 
@@ -219,6 +248,8 @@ public struct HomeSnapshot: Sendable, Equatable {
     public let settings: Settings
     /// The clock the page is drawn against.
     public let now: Date
+    /// The speech model's load, or `nil` when it can transcribe or was never on disk.
+    public let speechModel: SpeechModelLoad?
 
     /// Builds a snapshot; everything but the shortcut and the clock defaults to empty.
     public init(
@@ -229,7 +260,8 @@ public struct HomeSnapshot: Sendable, Equatable {
         systemName: String? = nil,
         shortcut: String,
         settings: Settings = .default,
-        now: Date
+        now: Date,
+        speechModel: SpeechModelLoad? = nil
     ) {
         self.permissions = permissions
         self.entries = entries
@@ -239,6 +271,7 @@ public struct HomeSnapshot: Sendable, Equatable {
         self.shortcut = shortcut
         self.settings = settings
         self.now = now
+        self.speechModel = speechModel
     }
 }
 
@@ -272,11 +305,14 @@ public enum HomePresenter {
             recentTitle: title(for: listed, calendar: calendar, now: snapshot.now),
             seeAll: kept.count > listed.count
                 ? MainAction(title: "See all", intent: .show(.history)) : nil,
-            nextStep: blocked ?? firstStep(kept: kept, shortcut: snapshot.shortcut),
+            // "Try it now" is withheld while the model loads, since trying it now is what does not work.
+            nextStep: blocked
+                ?? (snapshot.speechModel == nil ? firstStep(kept: kept, shortcut: snapshot.shortcut) : nil),
             hint: hint(shortcut: snapshot.shortcut, settings: snapshot.settings),
             demonstration: blocked == nil ? demonstration(for: snapshot.settings) : nil,
-            status: status(blocked: blocked != nil),
-            account: account(for: snapshot))
+            status: status(blocked: blocked != nil, speechModel: snapshot.speechModel),
+            account: account(for: snapshot),
+            speechModel: blocked == nil ? snapshot.speechModel.map(HomeSpeechModelNotice.init) : nil)
     }
 
     // MARK: - Showing the clipboard rather than mentioning it
@@ -339,11 +375,11 @@ public enum HomePresenter {
 
     // MARK: - Whether it can hear you
 
-    /// Two states only, listening and not, since anything finer belongs on Diagnostics.
-    static func status(blocked: Bool) -> HomeStatus {
-        blocked
-            ? HomeStatus(text: "Not listening", isReady: false)
-            : HomeStatus(text: "Listening · ready", isReady: true)
+    /// Listening or not, with the model's load named, since a ring lit during it would promise dictation.
+    static func status(blocked: Bool, speechModel: SpeechModelLoad? = nil) -> HomeStatus {
+        if blocked { return HomeStatus(text: "Not listening", isReady: false) }
+        if let speechModel { return HomeStatus(text: speechModel.status, isReady: false) }
+        return HomeStatus(text: "Listening · ready", isReady: true)
     }
 
     // MARK: - Who is here

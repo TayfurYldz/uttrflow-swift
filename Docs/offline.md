@@ -274,8 +274,9 @@ awaits `DictationPipeline.prepare()`.
 
 `DictationPipeline.prepare()` now catches a failed speech-engine load, keeps `isReady`
 false, and publishes a failed state when no dictation is in progress. The app maps a
-successful preparation to `.ready` and an unsuccessful one back to `.notInstalled`, so
-the menu bar can say *"Getting ready…"* or *"Setup hasn't finished"* instead of leaving
+successful preparation to `.ready`, an unsuccessful one to `.loadFailed` while the files are
+still on disk and to `.notInstalled` when they are not, so the menu bar can say *"Getting
+ready…"*, *"Speech model didn't load"* or *"Setup hasn't finished"* instead of leaving
 the user with a false *"Ready"*. A missing model is still a setup state rather than a
 startup exception, but it is no longer silently discovered only after the first keypress.
 

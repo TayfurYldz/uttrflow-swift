@@ -141,6 +141,9 @@ public actor DictationPipeline {
     /// Whether the recogniser has loaded and the next dictation will not wait for it.
     public private(set) var isReady = false
 
+    /// Whether `prepare` is loading the recogniser right now, which is when a new dictation is refused.
+    public private(set) var isLoading = false
+
     /// Every state the pipeline passes through, from now on.
     public func states() -> AsyncStream<DictationState> {
         observers.makeStream(startingWith: state)
@@ -148,6 +151,8 @@ public actor DictationPipeline {
 
     /// Loads the speech model so the first dictation is not the slow one. See `Docs/startup.md`.
     public func prepare() async {
+        isLoading = true
+        defer { isLoading = false }
         do {
             try await speech.prepare()
             isReady = true
@@ -174,6 +179,8 @@ public actor DictationPipeline {
     /// Begins listening. Does nothing if a dictation is already under way.
     public func startRecording() async {
         guard !isBusy else { return }
+        // Said rather than recorded: the words would wait behind the load, under a button saying nothing.
+        guard !isLoading else { return transition(to: .failed(.stillLoading)) }
         hasTurn = true
         defer { hasTurn = false }
 
