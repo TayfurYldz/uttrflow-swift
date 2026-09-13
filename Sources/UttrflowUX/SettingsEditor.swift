@@ -35,6 +35,7 @@ public enum SettingsEditor {
             if let rejection = rejection(forShortcut: binding) { throw rejection }
             if let clash = clash(for: action, binding: binding, in: updated) { throw clash }
             updated.shortcuts.replace(at: 0, with: binding, for: action)
+            updated.shortcutsReturnedToDefault.remove(action)
         case .tidying(let level):
             try applyTidying(level, to: &updated, given: capabilities)
         case .transcription(let quality):
@@ -156,9 +157,16 @@ public enum SettingsEditor {
             reason: "That is already the \(ShortcutRegistry.label(for: other).lowercased()) shortcut.")
     }
 
+    /// Said for ⌘, ⌥, ⌃ or ⇧ alone, naming Fn because it is the one key that can be held by itself.
+    static let bareModifier =
+        "That key alone is part of too many other shortcuts. Add a key or another modifier, or hold fn."
+
     /// The one gate a shortcut passes to be saved, asked by both the recorder and the editor.
 
     static func rejection(forShortcut binding: HotkeyBinding) -> SettingsRejection? {
+        if binding.isBareModifier {
+            return SettingsRejection(reason: bareModifier)
+        }
         if !binding.isUsable {
             return SettingsRejection(
                 reason: "Hold ⌘, ⌥, ⌃ or ⇧ as well, or the shortcut would fire while you type.")

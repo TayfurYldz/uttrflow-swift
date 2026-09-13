@@ -651,3 +651,31 @@ struct UnarmedShortcutTests {
         #expect(shown.explanation != SettingsPresenter.unarmed)
     }
 }
+
+@Suite("A shortcut returned to its default")
+struct ReturnedShortcutTests {
+    private func row(_ id: String, in settings: Settings) -> SettingsRow? {
+        SettingsPresenter.pane(for: .general, settings: settings, capabilities: .everything)
+            .groups.flatMap(\.rows).first { $0.id == id }
+    }
+
+    /// Issue 342: a held ⌘ that quietly became ⌥Space would look like the app forgot the user's choice.
+    @Test("says why, on the row whose shortcut was put back")
+    func saysWhy() throws {
+        var settings = Settings.default
+        settings.shortcutsReturnedToDefault = [.dictate]
+
+        let shown = try #require(row("shortcut.dictate", in: settings))
+
+        #expect(shown.explanation == SettingsPresenter.returnedToDefault)
+        let untouched = try #require(row("shortcut.clipboard", in: settings))
+        #expect(untouched.explanation != SettingsPresenter.returnedToDefault)
+    }
+
+    @Test("says nothing of it once the note is gone")
+    func saysNothingWithoutTheNote() throws {
+        let shown = try #require(row("shortcut.dictate", in: .default))
+
+        #expect(shown.explanation != SettingsPresenter.returnedToDefault)
+    }
+}

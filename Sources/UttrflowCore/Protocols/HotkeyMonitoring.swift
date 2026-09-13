@@ -49,8 +49,14 @@ public struct HotkeyBinding: Sendable, Equatable, Codable {
         keyCode == Self.functionKeyCode && modifiers.isEmpty
     }
 
-    /// Whether the binding has a modifier or is itself a held key; a bare letter would fire while typing.
-    public var isUsable: Bool { !modifiers.isEmpty || heldModifier != nil }
+    /// Whether this is ⌘, ⌥, ⌃ or ⇧ held with nothing else, which is part of every shortcut that uses it. See `Docs/core-hotkeys.md`.
+    public var isBareModifier: Bool {
+        guard let named = Self.modifier(ofKeyCode: keyCode) else { return false }
+        return modifiers.isSubset(of: [named])
+    }
+
+    /// Whether the binding has a modifier or is itself a held key, and is not a modifier alone; a bare letter fires while typing.
+    public var isUsable: Bool { (!modifiers.isEmpty || heldModifier != nil) && !isBareModifier }
 
     /// Whether the key code and the modifiers agree, since a pair that disagrees fires on the wrong key.
     public var isCoherent: Bool {
@@ -67,7 +73,7 @@ public struct HotkeyBinding: Sendable, Equatable, Codable {
     public var isDeliverable: Bool {
         guard isCoherent else { return false }
         // A held modifier is watched, not registered, so the modifier-key-code rule does not apply to it.
-        if heldModifier != nil { return true }
+        if heldModifier != nil { return isUsable }
         return isUsable && keyCode <= Self.highestKeyCode
             && !Self.modifierKeyCodes.contains(keyCode)
     }

@@ -16,15 +16,36 @@ struct HotkeyHoldTests {
         #expect(HotkeyBinding.functionHold.isDeliverable)
     }
 
-    /// Whether a binding can be delivered is the type's question; whether it is wise is the Mac owner's.
-    @Test("any modifier combination can be held, including one on its own")
+    @Test("every modifier key is read as a hold")
     func everyModifierCodeIsAHold() {
         // 54–63 less Caps Lock: ⌘ ⇧ ⌥ ⌃ left and right, and Fn.
         for keyCode: UInt16 in [54, 55, 56, 58, 59, 60, 61, 62, 63] {
             let binding = HotkeyBinding(keyCode: keyCode, modifiers: [])
             #expect(binding.heldModifier != nil, "key \(keyCode) was not treated as a hold")
-            #expect(binding.isDeliverable, "key \(keyCode) was refused")
         }
+    }
+
+    /// Issue 342: a held ⌘ fired on ⌘C, and a held ⌥ ended on ⌥→ and began again on ⌥A.
+    @Test("refuses ⌘, ⌥, ⌃ or ⇧ held on its own, however the recorder reported its flag")
+    func bareModifiersAreRefused() {
+        // Left and right of each, reported with no flags and with the key's own flag down.
+        for keyCode: UInt16 in [54, 55, 56, 58, 59, 60, 61, 62] {
+            let named = HotkeyBinding.modifier(ofKeyCode: keyCode).map { Set([$0]) } ?? []
+            for modifiers in [[], named] {
+                let binding = HotkeyBinding(keyCode: keyCode, modifiers: modifiers)
+                #expect(binding.isBareModifier, "key \(keyCode) with \(modifiers) was not read as bare")
+                #expect(!binding.isUsable, "key \(keyCode) with \(modifiers) was usable")
+                #expect(!binding.isDeliverable, "key \(keyCode) with \(modifiers) was deliverable")
+            }
+        }
+    }
+
+    @Test("Fn alone and a chord of modifiers are not bare, and stay deliverable")
+    func fnAndChordsAreNotBare() {
+        #expect(!HotkeyBinding.functionHold.isBareModifier)
+        #expect(!HotkeyBinding(keyCode: 58, modifiers: [.control, .option]).isBareModifier)
+        #expect(HotkeyBinding(keyCode: 55, modifiers: [.command, .option]).isDeliverable)
+        #expect(!HotkeyBinding.optionSpace.isBareModifier)
     }
 
     @Test("Caps Lock cannot be held, because nothing reports it")

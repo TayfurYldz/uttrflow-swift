@@ -67,8 +67,29 @@ struct SettingsShortcutValidationTests {
         // 58 is Option's own key code — what arrives when ⌃⌥ is pressed in the field.
         #expect(
             refusal(.shortcut(.dictate, HotkeyBinding(keyCode: 58, modifiers: [.control, .option]))) == nil)
-        // And a single modifier, which is the owner's choice to make even though ⌘C fires it.
-        #expect(refusal(.shortcut(.dictate, HotkeyBinding(keyCode: 55, modifiers: [.command]))) == nil)
+    }
+
+    /// Issue 342: ⌘C, ⌥→ and ⌥A all fired a bare-modifier binding, so the sentence has to say why and what to do.
+    @Test("refuses ⌘, ⌥, ⌃ or ⇧ held on its own, and says to add a key or hold fn")
+    func refusesABareModifier() {
+        for binding in [
+            HotkeyBinding(keyCode: 55, modifiers: [.command]),
+            HotkeyBinding(keyCode: 61, modifiers: []),
+            HotkeyBinding(keyCode: 59, modifiers: [.control]),
+            HotkeyBinding(keyCode: 60, modifiers: [.shift]),
+        ] {
+            #expect(refusal(.shortcut(.dictate, binding)) == SettingsEditor.bareModifier, "\(binding)")
+        }
+    }
+
+    @Test("choosing a shortcut again clears the note that it was returned to its default")
+    func choosingClearsTheReturnedNote() throws {
+        var settings = Settings.default
+        settings.shortcutsReturnedToDefault = [.dictate, .clipboard]
+
+        let updated = try SettingsEditor.apply(.shortcut(.dictate, .functionHold), to: settings)
+
+        #expect(updated.shortcutsReturnedToDefault == [.clipboard])
     }
 
     @Test("leaves the previous shortcut in force when the new one is refused")

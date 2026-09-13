@@ -42,7 +42,8 @@ public struct CarbonHotkey: Sendable, Equatable {
     ]
 
     public init(binding: HotkeyBinding) throws(CarbonHotkeyRejection) {
-        guard binding.isUsable else { throw .noModifiers }
+        // Not `isUsable`, which also refuses a bare modifier: the translator names that as a modifier used as a key.
+        guard !binding.modifiers.isEmpty || binding.heldModifier != nil else { throw .noModifiers }
         guard binding.keyCode <= Self.highestKeyCode else {
             throw .keyCodeOutOfRange(keyCode: binding.keyCode)
         }
