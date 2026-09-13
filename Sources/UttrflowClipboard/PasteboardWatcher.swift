@@ -100,6 +100,10 @@ public actor PasteboardWatcher {
             return nil
         }
 
+        // A copy its writer marked as not for history is never recorded, text or picture.
+        let markers = source.markers()
+        guard markers.allowsRecording else { return nil }
+
         // K4 — a picture, asked first because the branch below returns for anything textless.
         if copied == nil, let picture = source.image() {
             return NoticedClip(
@@ -118,7 +122,8 @@ public actor PasteboardWatcher {
         // Before the classifier, which reads the whole string: the store would refuse this anyway.
         guard fitsTheBound(text, html) else { return nil }
 
-        let kind = ClipKindDetector.kind(of: text)
+        // A concealed copy is a password to its writer, whatever its shape. See Docs/clipboard-secrets.md.
+        let kind = markers.contains(.concealed) ? .secret : ClipKindDetector.kind(of: text)
         return NoticedClip(
             clip: Clip(
                 text: text, kind: kind, copiedAt: date,

@@ -12,6 +12,9 @@ public protocol ClipboardSource: Sendable {
     /// The formatted flavour, read alongside the plain one, never instead of it.
     func html() -> String?
 
+    /// The nspasteboard.org markers on the current contents, read once per change.
+    func markers() -> PasteboardMarkers
+
     /// The picture on the clipboard as PNG bytes and pixel size, read only when there is no text.
     func image() -> (data: Data, width: Int, height: Int)?
 
