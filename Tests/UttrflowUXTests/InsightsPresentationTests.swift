@@ -132,7 +132,7 @@ struct InsightsFiguresTests {
                     changes: [HistoryFixture.change("word", "Word", over: 0..<1)], daysAgo: day)
             })
 
-        let figure = page.figures.first { $0.caption == "Accuracy" }
+        let figure = page.figures.first { $0.caption == DictationPresenter.accuracyTitle }
         #expect(figure?.value == "75.0%")
         #expect(figure?.meters.map(\.label) == ["Now"])
         // The page borrows the Dictation page's wording, so one arithmetic is described one way.
@@ -143,7 +143,7 @@ struct InsightsFiguresTests {
     func accuracyNeedsARecord() {
         let page = HistoryFixture.insights(
             entries: HistoryFixture.aWeek(seconds: 10, measured: false))
-        #expect(!page.figures.contains { $0.caption == "Accuracy" })
+        #expect(!page.figures.contains { $0.caption == DictationPresenter.accuracyTitle })
     }
 }
 

@@ -259,7 +259,7 @@ public enum InsightsPresenter {
             figures.append(
                 MainStatistic(
                     value: MainFormatting.percentage(accuracy, locale: locale),
-                    caption: "Accuracy",
+                    caption: DictationPresenter.accuracyTitle,
                     // The Dictation page's wording, so the two cannot drift apart.
                     comment: DictationPresenter.accuracyCaption,
                     meters: [MainMeter(label: "Now", fraction: accuracy)]))
