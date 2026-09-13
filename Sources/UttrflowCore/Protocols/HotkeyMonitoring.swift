@@ -140,6 +140,8 @@ public enum HotkeyEvent: Sendable, Equatable {
     case pressed
     /// The shortcut came up.
     case released
+    /// The held modifiers turned out to begin another shortcut, so the press is withdrawn unused.
+    case cancelled
 }
 
 /// Watches for the shortcut in every app.
