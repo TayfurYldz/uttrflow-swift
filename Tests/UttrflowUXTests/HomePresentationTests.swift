@@ -96,15 +96,14 @@ struct HomeSubtitleTests {
         #expect(page.subtitle == "Nothing yet today. Your words from earlier are still here.")
     }
 
-    @Test("a brand new install is told what to do")
+    /// The hero already says how to start, so a card under it saying so again is only repetition.
+    @Test("a brand new install is told what to do once, in the hero")
     func nothingEver() {
         let page = HistoryFixture.home()
         #expect(page.subtitle == "Nothing dictated yet. Hold the shortcut anywhere and talk.")
-        #expect(page.nextStep?.title == "Try it now")
-        #expect(page.nextStep?.message.contains("⌥Space") == true)
+        #expect(page.nextStep == nil)
     }
 
-    /// A page that keeps suggesting first steps to somebody three months in is a page they stop reading.
     @Test("somebody who has dictated is not told how to start")
     func noStepOnceStarted() {
         #expect(HistoryFixture.home(entries: [HistoryFixture.entry("said something")]).nextStep == nil)
@@ -123,6 +122,13 @@ struct HomeBlockedTests {
         #expect(page.recent.isEmpty)
         #expect(page.nextStep != nil)
         #expect(page.subtitle == "Uttrflow cannot listen yet.")
+    }
+
+    @Test("a missing permission still shows on a brand new install")
+    func blockedWithNoHistory() {
+        let page = HistoryFixture.home(permissions: [.microphone: .denied, .accessibility: .granted])
+        #expect(page.nextStep != nil)
+        #expect(page.nextStep?.title != "Try it now")
     }
 }
 
