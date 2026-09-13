@@ -108,7 +108,11 @@ Everything that decides anything. `HotkeyRecogniser`, `SettingsShortcutRecorder`
 and the settings decoding are pure values driven by `KeyStroke` sequences, with no window
 server involved. `SystemKeyboard` and `ActivationMonitor` are on the coverage exclusion list
 because they only create the tap and pass strokes on — what is made of those strokes is tested
-against every shape of binding.
+against every shape of binding. How a stroke is passed on is tested too: `Delivery` holds the sink
+as a struct around the closure, never the bare closure, because a closure read out of a `Mutex` is
+re-wrapped on every read and the stack deepened by each keystroke until the tap's thread overflowed.
+`SystemKeyboardDeliveryTests` checks that the 500th stroke, and the release after it, cost no more
+stack than the first.
 
 The parts that cannot be unit-tested are exercised by posting synthetic `CGEvent`s at the real
 app and watching the recording window appear. That proves the tap, the Accessibility grant and

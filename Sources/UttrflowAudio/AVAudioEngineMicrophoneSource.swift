@@ -4,6 +4,20 @@ private import Foundation
 public import UttrflowCore
 private import Synchronization
 
+/// The hardware-change handler, internal so tests can check that reading it leaves it as it was.
+final class ChangeHandler: Sendable {
+    /// The closure in a struct, since a bare closure read out of a `Mutex` is re-wrapped and written back.
+    private struct Handler: Sendable {
+        let call: @Sendable () -> Void
+    }
+
+    private let handler = Mutex<Handler?>(nil)
+
+    func set(_ call: @escaping @Sendable () -> Void) { handler.withLock { $0 = Handler(call: call) } }
+
+    func current() -> (@Sendable () -> Void)? { handler.withLock { $0 }?.call }
+}
+
 /// The engine behind the microphone, opened and closed on demand so a session can reopen it.
 private final class EngineDevice: InputDevice, @unchecked Sendable {
     /// One engine and the sink it feeds, so a transition publishes both or unwinds both.
@@ -31,10 +45,10 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
     /// Counts blocks off the tap, so key-up can wait for the one the hardware is still filling.
     private let drainer = TapDrain()
     /// Called when macOS changes the hardware under the engine, which only the session knows what to do about.
-    private let changed = Mutex<(@Sendable () -> Void)?>(nil)
+    private let changed = ChangeHandler()
 
     func whenChanged(_ handle: @escaping @Sendable () -> Void) {
-        changed.withLock { $0 = handle }
+        changed.set(handle)
     }
 
     func deliver(to onSamples: (@Sendable ([Float]) -> Void)?) {
@@ -86,7 +100,7 @@ private final class EngineDevice: InputDevice, @unchecked Sendable {
         }
 
         let live = Live(engine: engine, inputBus: inputBus)
-        let changed = changed.withLock { $0 }
+        let changed = changed.current()
         // On the main queue, not whichever thread CoreAudio noticed the change on.
         live.observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
