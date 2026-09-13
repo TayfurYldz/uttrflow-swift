@@ -11,7 +11,8 @@ import UttrflowCore
 struct DiagnosticsEngineProbeTests {
     /// Waits for the probe, which runs beside the test rather than inside it.
     private func settled(_ app: AppDelegate) async -> [TransformerKind: Bool] {
-        for _ in 0..<200 where app.transformerAvailability.isEmpty {
+        let ceiling = ContinuousClock.now + .seconds(30)
+        while app.transformerAvailability.isEmpty, ContinuousClock.now < ceiling {
             try? await Task.sleep(for: .milliseconds(10))
         }
         return app.transformerAvailability
