@@ -99,6 +99,7 @@ place to start; if you want to change it, [CONTRIBUTING](../CONTRIBUTING.md) and
 | Page | What it covers |
 |---|---|
 | [offline.md](offline.md) | Dictating with no network |
+| [logging.md](logging.md) | What the unified log may carry, and the audit that keeps typed text out of it |
 | [entitlements.md](entitlements.md) | What somebody is allowed to do, and how that is known offline |
 | [account-session.md](account-session.md) | The account session |
 | [account-keychain.md](account-keychain.md) | The refresh token in the Keychain |

@@ -376,7 +376,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UttrflowPipelineTests",
-            dependencies: ["UttrflowPipeline", "UttrflowTestSupport"],
+            dependencies: ["UttrflowAI", "UttrflowPipeline", "UttrflowInput", "UttrflowTestSupport"],
             swiftSettings: sharedSwiftSettings
         ),
         .testTarget(

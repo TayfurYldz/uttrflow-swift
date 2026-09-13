@@ -59,8 +59,11 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
 
         // Models echo the shape of the worked examples, so the answer is unwrapped before it is judged.
         let unwrapped = ResponseUnwrapper.unwrap(rewritten, spoken: spoken)
-        let finishing = CleaningPipeline.afterModel(
-            for: formatter, situation: request.situation, heard: request.transcription.text)
+        let finishing =
+            request.scope == .piece
+            ? CleaningPipeline.afterModelPiece(situation: request.situation)
+            : CleaningPipeline.afterModel(
+                for: formatter, situation: request.situation, heard: request.transcription.text)
         let polished = finishing.run(Draft(keepingLineBreaks: TextTidy.collapseSpacing(unwrapped)))
         let finished = polished.text
 

@@ -11,24 +11,36 @@ public struct TransformationRequest: Sendable, Equatable {
     public let profile: UserProfile
     /// Where the words are going, resolved from the context unless a caller already knows.
     public let situation: Situation
+    /// Whether the transcript is the whole message or one piece of it, which decides the passes that run.
+    public let scope: CleaningScope
 
-    /// A request; context and profile default to knowing nothing.
+    /// A request; context and profile default to knowing nothing, and the transcript to being the whole message.
     public init(
         transcription: Transcription,
         context: AppContext = .unknown,
         profile: UserProfile = .default,
-        situation: Situation? = nil
+        situation: Situation? = nil,
+        scope: CleaningScope = .message
     ) {
         self.transcription = transcription
         self.context = context
         self.profile = profile
         self.situation = situation ?? SituationResolver.resolve(from: context)
+        self.scope = scope
     }
 
     /// The language to route on: what the engine heard, else the user's first preferred language.
     public var effectiveLanguage: LanguageCode? {
         transcription.detectedLanguage?.code ?? profile.preferredLanguages.first
     }
+}
+
+/// How much of the message a transcript is. See `Docs/cleanup-design.md` §7.
+public enum CleaningScope: Sendable, Equatable {
+    /// The whole message: every pass runs, the first word and the final stop included.
+    case message
+    /// One piece of a longer message: the first word and the final stop wait for the joined whole.
+    case piece
 }
 
 /// Cleaned-up text, tagged with what produced it.

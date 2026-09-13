@@ -118,6 +118,48 @@ prose measures the recogniser doing an easier job than the product's.
   clean-up rather than the disk. A real idle app carries no audio at all, so the true
   idle floor is around 6 MB.
 
+### The suggestion model's GPU memory
+
+The suggestion model runs on MLX, and MLX keeps every buffer it frees in a cache for reuse.
+It reuses a cached buffer only for a request of nearly the same size, and by default it
+empties the cache only near most of the GPU's working set, which is tens of gigabytes on a
+48 GB Mac. Every suggestion pass reads a prompt of a different length, so every pass
+allocated buffers nothing could reuse and left them in the cache: one app grew from 2.9 GB
+to 12 GB in forty minutes of typing.
+
+`GPUBufferCache` now caps that cache at 256 MB for the process, and every pass through
+`MLXCandidateScorer` — a generation, an alternatives pass, a score — empties it when the
+pass ends, however it ends. `MLXCleanupModel` does the same around a rewrite. So turning
+suggestions off or leaving the Mac idle leaves the weights and at most the capped cache —
+in practice nothing. The weights themselves stay loaded until the app quits.
+
+Measured with `uttrflow-bakeoff gpu-memory` (Release, Gemma 3 4B QAT, 48 GB Apple silicon):
+forty passes over invented message threads of 120–310 words, every fourth pass cancelled
+part-way, each followed by one score. The figures are MLX's own counters, in MB.
+
+| after | active, before | cache, before | peak, before | active, after | cache, after | peak, after |
+|---|---|---|---|---|---|---|
+| loading | 2,485 | 218 | 2,701 | 2,485 | 218 | 2,701 |
+| pass 1 | 2,485 | 807 | 2,907 | 2,541 | 0 | 2,843 |
+| pass 5 | 2,485 | 2,661 | 3,040 | 2,485 | 0 | 3,013 |
+| pass 10 | 2,485 | 3,931 | 3,041 | 2,485 | 0 | 3,036 |
+| pass 20 | 2,485 | 6,273 | 3,111 | 2,485 | 0 | 3,036 |
+| pass 30 | 2,485 | 8,302 | 3,111 | 2,485 | 0 | 3,036 |
+| pass 40 | 2,485 | 9,565 | 3,111 | 2,485 | 0 | 3,036 |
+| 5 s idle | 2,485 | 9,565 | 3,111 | 2,485 | 0 | 3,036 |
+
+- **The bound is the weights plus one pass.** The weights hold 2,485 MB, one pass needs
+  about 550 MB more at its peak, and the cache holds nothing once a pass has ended. The
+  cap matters only inside a pass and for the buffers a cancelled pass frees after it
+  has returned: in the worst reading, 86 MB were cached between passes.
+- **It costs a pass no measurable time.** Paired runs of forty uncancelled passes, old and
+  new binaries alternating, gave medians of 647 against 661 ms, 762 against 653 ms and
+  640 against 628 ms on a quiet machine, and 847 against 869 ms and 907 against 930 ms
+  under other builds. The run-to-run spread is larger than any difference.
+- **Either half alone leaves memory behind.** A 1 GB cap without
+  emptying held 1,024 MB after every run; emptying without a cap left 107 MB behind a
+  cancelled pass. Both together are what the table shows.
+
 ## Processor
 
 Memory answers "will it fit". This is the other half — what it costs to run — and a table
@@ -609,6 +651,7 @@ make bakeoff ARGS="profile"                          # the standard run
 make bakeoff ARGS="profile --app dist/Uttrflow.app"   # include the bundle in the disk figure
 make bakeoff ARGS="profile --dictations 30"          # a longer leak check
 make bakeoff ARGS="profile --transcribe-only"        # transcription without the clean-up pass
+make bakeoff ARGS="gpu-memory --passes 40"           # the suggestion model's GPU memory, pass by pass
 ```
 
 The speech model must already be installed (`uttrflow-dev models install`). Audio is

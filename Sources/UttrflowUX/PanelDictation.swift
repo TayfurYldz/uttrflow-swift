@@ -7,6 +7,8 @@ public enum PanelDictationObstacle: Sendable, Equatable {
     case microphoneNotGranted
     /// The speech model is still arriving; its own case, since the clipboard half is unaffected.
     case modelNotReady(percent: Int?)
+    /// The speech model is on disk and still being loaded.
+    case modelLoading
 }
 
 /// Whether the microphone can start a dictation; not a progress state, since the dock shows that.
@@ -63,6 +65,11 @@ extension PanelPresenter {
                 isEnabled: false,
                 status: percent.map { "Speech model \($0)% downloaded" }
                     ?? "Speech model still downloading")
+
+        case .unavailable(.modelLoading):
+            PanelMicrophone(
+                symbolName: "hourglass", label: "The speech model is still loading", isEnabled: false,
+                status: "Speech model still loading")
         }
     }
 }

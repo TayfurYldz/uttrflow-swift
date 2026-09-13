@@ -4,41 +4,54 @@ extension CleaningPipeline {
     /// Every pass in the shipped order, for plain text at a caret that says nothing.
     public static let standard = standard(for: .standard(for: .plain), situation: .unknown)
 
-    /// The passes a language model is handed the result of; casing and the full stop are finished after it.
+    /// The passes a language model is handed the result of, which are the piece's; the message's are finished after it.
     public static func beforeModel(
         for formatter: DestinationFormatter, situation: Situation, steps: CleaningSteps = .default
     ) -> CleaningPipeline {
-        standard(for: formatter, situation: situation, steps: steps)
-            .without([FirstWordPass.id, TerminalStopPass.id])
+        piece(numbers: formatter.numbers, digits: formatter.digits, steps: steps)
     }
 
-    /// Every pass the user has left on, in the shipped order; the finishing two are the formatter's and always run.
+    /// Every pass the user has left on over a whole message, in the shipped order: the piece's, then the message's.
     public static func standard(
         for formatter: DestinationFormatter, situation: Situation, steps: CleaningSteps = .default
+    ) -> CleaningPipeline {
+        CleaningPipeline(
+            passes: piece(numbers: formatter.numbers, digits: formatter.digits, steps: steps).passes
+                + message(for: formatter, situation: situation).passes)
+    }
+
+    /// The passes that are right on any piece of a message, which is why no casing or stop policy can reach them.
+    public static func piece(
+        numbers: NumberPolicy, digits: DigitGrouping, steps: CleaningSteps = .default
     ) -> CleaningPipeline {
         let cleanings: [any CleaningPass] = [
             FillersPass(), StammersPass(), RepeatedPhrasePass(), SelfCorrectionPass(),
             SpokenPunctuationPass(), LayoutWordsPass(),
-            NumberFormsPass(policy: formatter.numbers, digits: formatter.digits),
+            NumberFormsPass(policy: numbers, digits: digits),
             ContractionsPass(), SpacingPass(),
         ]
-        return CleaningPipeline(
-            passes: cleanings.filter { steps.runs($0.id) }
-                + finishing(for: formatter, situation: situation).passes)
+        return CleaningPipeline(passes: cleanings.filter { steps.runs($0.id) })
     }
 
-    /// The passes that finish a model's answer: the caret's echo taken back, then casing and the final stop as the formatter says.
+    /// The passes that finish a model's answer to a whole message: the caret's echo taken back, then the message's.
     public static func afterModel(
         for formatter: DestinationFormatter, situation: Situation, heard: String? = nil
     ) -> CleaningPipeline {
-        let echo = CaretEchoPass(
-            state: situation.insertion.sentenceState, precedingText: situation.insertion.precedingText)
-        return CleaningPipeline(
-            passes: [echo] + finishing(for: formatter, situation: situation, heard: heard).passes)
+        CleaningPipeline(
+            passes: afterModelPiece(situation: situation).passes
+                + message(for: formatter, situation: situation, heard: heard).passes)
     }
 
-    /// The two passes that decide the first word and the final stop; `heard` is the transcript `.asSpoken` copies.
-    static func finishing(
+    /// What finishes a model's answer to one piece: only the caret's echo, since each piece's prompt quotes the caret.
+    public static func afterModelPiece(situation: Situation) -> CleaningPipeline {
+        CleaningPipeline(passes: [
+            CaretEchoPass(
+                state: situation.insertion.sentenceState, precedingText: situation.insertion.precedingText)
+        ])
+    }
+
+    /// The two passes asked once of a whole message, the first word and the final stop; `heard` is what `.asSpoken` copies.
+    public static func message(
         for formatter: DestinationFormatter, situation: Situation, heard: String? = nil
     ) -> CleaningPipeline {
         CleaningPipeline(passes: [

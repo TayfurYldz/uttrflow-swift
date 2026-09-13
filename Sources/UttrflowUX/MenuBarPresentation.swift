@@ -18,7 +18,20 @@ public enum SpeechModelReadiness: Sendable, Equatable {
     case downloading(fractionCompleted: Double?)
     /// On disk, but not yet loaded into memory, which is cold-start slow.
     case loading
+    /// On disk, but the load ended without a model that can transcribe.
+    case loadFailed
     case notInstalled
+
+    /// What to tell a person about the load, timed from `start`; `nil` when there is no load to speak of.
+    public func load<Moment: InstantProtocol>(
+        since start: Moment?, now: Moment
+    ) -> SpeechModelLoad? where Moment.Duration == Duration {
+        switch self {
+        case .loading: .loading(elapsed: start.map { $0.duration(to: now) } ?? .zero)
+        case .loadFailed: .failed
+        case .ready, .downloading, .notInstalled: nil
+        }
+    }
 }
 
 /// A recent dictation, as much of it as a menu can show.
@@ -370,6 +383,8 @@ public enum MenuBarPresenter {
             return "Setting up… \(percentage(of: fraction))%"
         case .loading:
             return "Getting ready…"
+        case .loadFailed:
+            return "Speech model didn't load"
         case .notInstalled:
             return "Setup hasn't finished"
         case .ready:
