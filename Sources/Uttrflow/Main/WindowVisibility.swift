@@ -7,17 +7,54 @@ import SwiftUI
 extension View {
     /// Calls `onChange` with whether this view's window is the one being used, now and whenever it changes.
     func onWindowAttentionChange(_ onChange: @escaping (Bool) -> Void) -> some View {
-        background(WindowAttentionReporter(onChange: onChange).allowsHitTesting(false))
+        modifier(WindowAttentionModifier(onChange: onChange))
     }
+}
+
+/// Measures the part of the view its scroll view leaves uncovered and hands it to the reporter.
+private struct WindowAttentionModifier: ViewModifier {
+    let onChange: (Bool) -> Void
+
+    /// A reference, so a scroll reaches the reporter without re-evaluating the view's body.
+    @State private var relay = VisibleFrameRelay()
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) { proxy in
+                WindowAttention.uncoveredFrame(
+                    size: proxy.size, inWindow: proxy.frame(in: .global),
+                    scrollViewBounds: proxy.bounds(of: .scrollView))
+            } action: {
+                relay.frame = $0
+            }
+            .background(
+                WindowAttentionReporter(relay: relay, onChange: onChange).allowsHitTesting(false))
+    }
+}
+
+/// Carries the view's uncovered frame, in window coordinates from the top left, to the `NSView` that decides.
+@MainActor
+private final class VisibleFrameRelay {
+    /// Nil until SwiftUI has measured the view once.
+    var frame: CGRect? {
+        didSet {
+            if frame != oldValue { onChange?() }
+        }
+    }
+
+    var onChange: (() -> Void)?
 }
 
 /// A zero-sized `NSView` whose only job is to have a `window`.
 private struct WindowAttentionReporter: NSViewRepresentable {
+    let relay: VisibleFrameRelay
     let onChange: (Bool) -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = AttentionReportingView()
         view.onChange = onChange
+        view.relay = relay
+        relay.onChange = { [weak view] in view?.recheck() }
         return view
     }
 
@@ -28,6 +65,7 @@ private struct WindowAttentionReporter: NSViewRepresentable {
 
 private final class AttentionReportingView: NSView {
     var onChange: ((Bool) -> Void)?
+    var relay: VisibleFrameRelay?
     /// The last answer given, so repeated notices do not restart a running animation.
     private var lastReported: Bool?
 
@@ -43,7 +81,8 @@ private final class AttentionReportingView: NSView {
         }
         let windowNotices: [NSNotification.Name] = [
             NSWindow.didChangeOcclusionStateNotification, NSWindow.didBecomeKeyNotification,
-            NSWindow.didResignKeyNotification,
+            NSWindow.didResignKeyNotification, NSWindow.didMoveNotification,
+            NSWindow.didResizeNotification, NSWindow.didChangeScreenNotification,
         ]
         for name in windowNotices {
             centre.addObserver(self, selector: #selector(recheck), name: name, object: window)
@@ -51,6 +90,7 @@ private final class AttentionReportingView: NSView {
         let applicationNotices: [NSNotification.Name] = [
             NSApplication.didHideNotification, NSApplication.didUnhideNotification,
             NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification,
+            NSApplication.didChangeScreenParametersNotification,
         ]
         for name in applicationNotices {
             centre.addObserver(self, selector: #selector(recheck), name: name, object: nil)
@@ -78,15 +118,30 @@ private final class AttentionReportingView: NSView {
         Task { @MainActor in self.recheck() }
     }
 
-    @objc private func recheck() {
+    @objc func recheck() {
         let attention = WindowAttention(
             isShown: window != nil && !isHiddenOrHasHiddenAncestor,
             isKey: window?.isKeyWindow ?? false,
             isApplicationActive: NSApp.isActive,
             isApplicationHidden: NSApp.isHidden,
             isOnScreen: window?.occlusionState.contains(.visible) ?? false,
+            isViewVisible: isVisibleOnADisplay,
             motion: .current())
         report(attention.animates)
+    }
+
+    /// Whether the part of this view its scroll view leaves uncovered lies on a display, which a sliver of window does not promise.
+    private var isVisibleOnADisplay: Bool {
+        guard let window, let content = window.contentView else { return false }
+        guard let uncovered = relay?.frame else { return true }
+        let inContent =
+            content.isFlipped
+            ? uncovered : WindowAttention.flipped(uncovered, withinHeight: content.bounds.height)
+        let onScreen =
+            uncovered.isEmpty
+            ? CGRect.zero : window.convertToScreen(content.convert(inContent, to: nil))
+        return WindowAttention.isVisible(
+            unclippedFrameOnScreen: onScreen, displays: NSScreen.screens.map(\.frame))
     }
 
     private func report(_ animates: Bool) {
