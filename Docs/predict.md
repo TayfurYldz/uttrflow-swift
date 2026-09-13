@@ -139,6 +139,23 @@ tap, the panel, and the corpus. It reads the field off the main thread, and a tu
 takes longer than `SuggestionSession.turnBudgetInMilliseconds` draws nothing at all —
 answering a moment that has passed is worse than answering nothing.
 
+### What counts as a value the user finished
+
+A field's life ends four ways — Return, the focus leaving it, the application going to the
+background, and the line going idle — and `CommitPolicy` decides which of those finish a
+*value* in that application. Everywhere the words stay where they were typed, all four do.
+
+Where the words are **sent** rather than kept, only Return does. A shell rewrites its line on
+the way out, so a terminal has always learned on Return alone; a chat composer wants the same
+rule for a different reason, which is that a line abandoned or deleted there was never a
+message. Without it an unsent draft was recorded exactly like a sent one and came back as a
+suggestion later. Which applications are conversations is the destination table's answer
+(`DestinationClassifier`), not a second list kept beside it.
+
+What this deliberately does not try to do is tell a composer from a document by looking at the
+Accessibility tree: both are a text area whose contents change, and every heuristic tried for
+that either missed real documents or still admitted composers.
+
 One turn runs at a time. `TurnGate` admits a turn, holds the next while it runs, and after
 10 s (`TurnGate.stallSeconds`) leaves the running one behind and admits the next in its
 place; a turn left behind asks `isCurrent` before it touches anything, so a read into an
