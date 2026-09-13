@@ -1,3 +1,4 @@
+import UttrflowCore
 import UttrflowDictionary
 import Testing
 
@@ -155,13 +156,17 @@ struct CorrectionEngineTests {
 
     // MARK: What it costs
 
-    /// 0.5 ms measured, 25 ms asserted so only a model call fails. See Docs/ai-correction-thresholds.md.
-    @Test("correcting a whole dictation is not a measurable part of it")
+    /// Counted rather than timed, so load cannot fail it. See Docs/ai-correction-thresholds.md.
+    @Test("correcting a whole dictation reads the screen once and no more of a larger dictionary")
     func costsAlmostNothing() {
-        let big = PhoneticIndex(
-            entries: (0..<10_000).map {
-                DictionaryEntry(word: "coined\($0)", origin: .observed, firstSeen: .distantPast)
-            } + CorrectionFixtures.entries)
+        func dictionary(_ size: Int) -> PhoneticIndex {
+            PhoneticIndex(
+                entries: (0..<size).map { number in
+                    // Spelt in `B`, `V` and vowels, so every filler word has a sound of its own and none is heard.
+                    let spelling = (0..<16).map { (number >> $0) & 1 == 0 ? "ba" : "va" }.joined()
+                    return DictionaryEntry(word: spelling, origin: .observed, firstSeen: .distantPast)
+                } + CorrectionFixtures.entries)
+        }
         let utterance = CorrectionFixtures.spoken(
             """
             we should run the ?s ?q ?l migration tonight before the ?payment ?sheet work lands \
@@ -171,15 +176,25 @@ struct CorrectionEngineTests {
         let context = CorrectionFixtures.showing(
             String(repeating: "PaymentSheet swift ", count: 250))
 
-        let repetitions = 200
-        let elapsed = ContinuousClock().measure {
-            for _ in 0..<repetitions {
-                _ = engine.proposals(for: utterance, against: big, seeing: context)
+        func work(over index: PhoneticIndex) -> (proposals: [WordCorrection], entries: Int, screens: Int) {
+            let entries = WorkTally()
+            let screens = WorkTally()
+            let proposals = PhoneticIndex.$entriesRead.withValue(entries) {
+                CorrectionEvidence.$screensRead.withValue(screens) {
+                    engine.proposals(for: utterance, against: index, seeing: context)
+                }
             }
+            return (proposals, entries.count, screens.count)
         }
-        let each = elapsed / repetitions
-        print("CORRECTION  \(utterance.words.count) words over 10,000 entries: \(each)")
-        #expect(each < .milliseconds(25))
+
+        let small = work(over: dictionary(50))
+        let large = work(over: dictionary(10_000))
+        print("CORRECTION  entries read over 50: \(small.entries), over 10,000: \(large.entries)")
+
+        #expect(small.entries > 0, "the doubted runs found candidates, so reading was counted")
+        #expect(large.proposals == small.proposals)
+        #expect(large.entries == small.entries, "a larger dictionary costs no more entries read")
+        #expect(large.screens == 1, "the screen is read once per utterance, not once per doubted run")
     }
 
     // MARK: Housekeeping

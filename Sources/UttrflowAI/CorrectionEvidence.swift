@@ -9,6 +9,9 @@ struct CorrectionEvidence: Sendable {
     /// The most words read off the screen: a visible page, and small enough that the scan is not measurable.
     static let maximumWordsOnScreen = 512
 
+    /// Counts every read of the screen, so a test can show one utterance reads it once however many runs are doubted.
+    @TaskLocal static var screensRead: WorkTally?
+
     /// The words the frontmost app is showing.
     private let onScreen: Haystack
     /// The words of the utterance the recogniser was sure of.
@@ -16,6 +19,7 @@ struct CorrectionEvidence: Sendable {
 
     /// Reads both haystacks once per utterance; only words at or above `certainAt` may corroborate.
     init(utterance: Utterance, seeing context: AppContext, certainAt threshold: Double) {
+        Self.screensRead?.record()
         // The title and the selection split by letters, never the app's own name; `LearnableWords` agrees.
         onScreen = Haystack(
             TextTidy.words(

@@ -10,6 +10,8 @@ public actor Verifier {
     private let supersession: (any SupersessionRecording)?
     /// How long the model has to judge one keystroke's candidates, held so a test need not wait it out.
     private let budgetInMilliseconds: Int
+    /// What the budget is measured on, a real clock but for tests that decide when it runs out.
+    private let clock: any Clock<Duration>
     /// The verdicts already reached, so most keystrokes cost nothing at all.
     private var cache = VerdictCache()
 
@@ -17,12 +19,14 @@ public actor Verifier {
     public init(
         index: EnvironmentIndex, scoring: (any CandidateScoring)? = nil,
         supersession: (any SupersessionRecording)? = nil,
-        budgetInMilliseconds: Int = Verification.budgetInMilliseconds
+        budgetInMilliseconds: Int = Verification.budgetInMilliseconds,
+        clock: any Clock<Duration> = ContinuousClock()
     ) {
         self.index = index
         self.scoring = scoring
         self.supersession = supersession
         self.budgetInMilliseconds = budgetInMilliseconds
+        self.clock = clock
     }
 
     /// Every candidate the gates allow, in the form they allow it, the wrong ones dropped.
@@ -56,7 +60,7 @@ public actor Verifier {
     /// The same verdict, against a budget one keystroke's whole set of candidates has to share.
     private func verdict(
         for candidate: Candidate, in surface: Surface, typed: String, now: Date,
-        before deadline: ContinuousClock.Instant
+        before deadline: Budget
     ) async -> Verdict {
         let key = VerdictCache.Key(
             candidate: candidate.text, context: Self.context(of: surface, typed: typed))
@@ -117,7 +121,7 @@ public actor Verifier {
     /// One candidate as the gates leave it, absent when they refuse it.
     private func allowed(
         _ candidate: Candidate, in surface: Surface, typed: String, now: Date,
-        before deadline: ContinuousClock.Instant
+        before deadline: Budget
     ) async -> Candidate? {
         switch await verdict(
             for: candidate, in: surface, typed: typed, now: now, before: deadline)
@@ -212,17 +216,17 @@ public actor Verifier {
 
     /// What the model says, silent when it is not up and over budget when it did not answer in time.
     private func plausibility(
-        of candidate: String, following context: String, before deadline: ContinuousClock.Instant
+        of candidate: String, following context: String, before deadline: Budget
     ) async -> Plausibility {
         guard let scoring, await scoring.isReady else { return .silent }
-        guard ContinuousClock.now < deadline else { return .overBudget }
+        guard !deadline.hasRunOut() else { return .overBudget }
         return await Self.raced(candidate, following: context, by: scoring, before: deadline)
     }
 
     /// The model against the clock, so a slow answer costs the candidate rather than the keystroke.
     private static func raced(
         _ candidate: String, following context: String, by scoring: any CandidateScoring,
-        before deadline: ContinuousClock.Instant
+        before deadline: Budget
     ) async -> Plausibility {
         await withTaskGroup(of: Plausibility.self, returning: Plausibility.self) { group in
             group.addTask {
@@ -232,7 +236,7 @@ public actor Verifier {
                 return .scored(score)
             }
             group.addTask {
-                try? await Task.sleep(until: deadline, clock: .continuous)
+                await deadline.runsOut()
                 return .overBudget
             }
             let first = await group.next() ?? .overBudget
@@ -242,8 +246,8 @@ public actor Verifier {
     }
 
     /// When this keystroke's whole set of candidates has to have been judged by.
-    private func deadline() -> ContinuousClock.Instant {
-        .now + .milliseconds(budgetInMilliseconds)
+    private func deadline() -> Budget {
+        Budget.starting(.milliseconds(budgetInMilliseconds), on: clock)
     }
 
     /// What a verdict is remembered against, which is this field and what has been typed into it.
@@ -251,5 +255,19 @@ public actor Verifier {
         [
             surface.bundleIdentifier, surface.role, surface.locator ?? "", surface.scope ?? "", typed,
         ].joined(separator: "\u{0}")
+    }
+}
+
+/// One keystroke's budget on the verifier's clock: whether it has run out, and a wait until it does.
+struct Budget: Sendable {
+    let hasRunOut: @Sendable () -> Bool
+    let runsOut: @Sendable () async -> Void
+
+    /// A budget of `duration` from now, on `clock`.
+    static func starting<C: Clock<Duration>>(_ duration: Duration, on clock: C) -> Budget {
+        let end = clock.now.advanced(by: duration)
+        return Budget(
+            hasRunOut: { clock.now >= end },
+            runsOut: { try? await clock.sleep(until: end, tolerance: nil) })
     }
 }

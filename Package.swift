@@ -391,7 +391,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UttrflowPredictTests",
-            dependencies: ["UttrflowPredict"],
+            dependencies: ["UttrflowPredict", "UttrflowTestSupport"],
             swiftSettings: sharedSwiftSettings
         ),
         .testTarget(

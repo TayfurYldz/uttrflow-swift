@@ -1,4 +1,5 @@
 import Foundation
+import UttrflowTestSupport
 
 @testable import UttrflowPredict
 
@@ -31,25 +32,29 @@ actor ScriptedScoring: CandidateScoring {
     private let score: Double?
     /// Whether the model is up, for the tests about one still loading.
     private let loaded: Bool
-    /// How long a score takes, for the tests about a model too slow to wait for.
-    private let delay: Duration?
+    /// The clock a slow model runs past the budget on, for the tests about a model too slow to wait for.
+    private let overrunning: ManualClock?
     /// How many scores it has been asked for.
     private(set) var asked = 0
 
-    /// A model that answers this, is up or is not, and takes this long over it.
-    init(_ score: Double?, loaded: Bool = true, delay: Duration? = nil) {
+    /// A model that answers this, is up or is not, and runs past the budget on `overrunning` when given one.
+    init(_ score: Double?, loaded: Bool = true, overrunning: ManualClock? = nil) {
         self.score = score
         self.loaded = loaded
-        self.delay = delay
+        self.overrunning = overrunning
     }
 
     /// Whether the model is up.
     var isReady: Bool { loaded }
 
-    /// The score it was told to answer, after whatever delay it was given.
+    /// The score it was told to answer, only after the budget has run out when it is a slow one.
     func logLikelihood(of candidate: String, following context: String) async -> Double? {
         asked += 1
-        if let delay { try? await Task.sleep(for: delay) }
+        if let overrunning {
+            overrunning.advance(by: .seconds(3_600))
+            // Cut short when the verifier stops waiting; a verifier that never stops gets the score late.
+            try? await Task.sleep(for: .seconds(30))
+        }
         return score
     }
 }
