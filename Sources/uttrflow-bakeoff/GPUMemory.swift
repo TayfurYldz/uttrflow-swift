@@ -38,9 +38,24 @@ struct GPUMemory: AsyncParsableCommand {
         try await scorer.prepare()
         print("loaded                    \(Self.row(GPUBufferCache.reading))")
         var times: [Int] = []
+        var readings: [BudgetReading] = []
         for pass in 1...passes {
             let cancelled = cancelEvery > 0 && pass % cancelEvery == 0
-            let elapsed = await Self.measure(pass: pass, cancelled: cancelled, with: scorer)
+            let (elapsed, peak) = await PeakMemory.observed {
+                await Self.measure(pass: pass, cancelled: cancelled, with: scorer)
+            }
+            if let peak {
+                readings.append(
+                    .init(
+                        state: .suggestionsPassPeak, label: "pass \(pass)",
+                        footprintBytes: peak.footprintBytes))
+            }
+            if let settled = MemoryFootprint.current() {
+                readings.append(
+                    .init(
+                        state: .suggestionsBetweenPasses, label: "after pass \(pass)", footprintBytes: settled
+                    ))
+            }
             if !cancelled { times.append(elapsed) }
             let kind = cancelled ? "cancelled" : "complete "
             let label =
@@ -53,6 +68,10 @@ struct GPUMemory: AsyncParsableCommand {
             await scorer.release()
             try? await Task.sleep(for: .seconds(1))
             print("released                  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())")
+            if let released = MemoryFootprint.current() {
+                readings.append(
+                    .init(state: .afterRelease, label: "a second after release", footprintBytes: released))
+            }
             let reloading = ContinuousClock.now
             try await scorer.prepare()
             let reload = Int((ContinuousClock.now - reloading) / .milliseconds(1))
@@ -61,10 +80,12 @@ struct GPUMemory: AsyncParsableCommand {
             )
         }
         let sorted = times.sorted()
-        guard !sorted.isEmpty else { return }
-        print(
-            "complete passes: median \(sorted[sorted.count / 2]) ms, mean \(sorted.reduce(0, +) / sorted.count) ms"
-        )
+        if !sorted.isEmpty {
+            print(
+                "complete passes: median \(sorted[sorted.count / 2]) ms, mean \(sorted.reduce(0, +) / sorted.count) ms"
+            )
+        }
+        try BudgetVerdict.enforce(readings)
     }
 
     /// One generation pass, cancelled part-way when asked, then one score; returns the milliseconds both took.

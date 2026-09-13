@@ -270,6 +270,32 @@ drop in a loop. A reload that holds for thirty minutes starts the wait over.
 
 The speech model is left alone under pressure, for the reasons above.
 
+## How the budget is enforced
+
+Both budgets above are checked, not only stated. `make perf-budget` runs in `make verify`, needs
+no build, no model and no window, and reads the source for the ways a budget has been broken
+before. `Scripts/perf_budget_audit.py` holds the rules and prints every allowance with its reason
+on every run:
+
+| check | fails when |
+|---|---|
+| wakeups | a repeating `Timer`, repeating `DispatchSource` timer, display link or sleeping loop in product code has an interval under 500 ms, or one the audit cannot resolve, and is not listed with the reason it is not an idle cost |
+| priority | the suggestion and local-model modules ask for more than utility priority, detach a task without one, or the app uses the suggestion model outside a `Discretionary` wrapper |
+| motion | a `TimelineView`, `repeatForever`, phase or keyframe animator or repeating symbol effect reads neither `MotionBudget` nor `WindowAttention`, or is paused by a literal |
+| cache | a model pass (`perform`, `generate`, `TokenIterator`, `ChatSession`) sits in no function that caps MLX's cache and clears it on exit, a `release()` does not clear it, or the cap is over 256 MB |
+| counters | `ResourceBudget`'s limits differ from the table above |
+
+`--self-test` injects one violation per check into the tree as read and fails unless the audit
+catches it, so a rule that has stopped matching the code is found rather than trusted. A breach
+already on `main` is listed under the issue that fixes it, and fails as stale once it is gone.
+
+Memory itself can only be read with the models loaded, so `make perf-budget-models` runs
+`uttrflow-bakeoff gpu-memory --release` and `uttrflow-bakeoff profile` and each exits non-zero
+when a reading is over its line: every settled moment of a profile against the idle line, its
+peak against a dictation's, each pass's peak and settled footprint against the suggestion lines,
+and the footprint a second after a release against the idle line. `ResourceBudget` in
+`UttrflowEval` is the one judge both use.
+
 ## Processor
 
 Memory answers "will it fit". This is the other half — what it costs to run — and a table
