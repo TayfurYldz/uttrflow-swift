@@ -636,6 +636,45 @@ The verdict is decided by rules stated in code, not by reading the column:
 - **leaking** — grew past the allowance and never once fell back.
 - **undetermined** — fewer than three readings. Two points are a line whatever they are.
 
+### What `leaks` reports on the running app
+
+`leaks $(pgrep -x Uttrflow)` on a release build (#411) found three groups, none of them growing
+with time: 3,420 leaked nodes and 583 KB at one minute, the same at 92 minutes.
+
+| Group | Size | Owner | State |
+|---|---|---|---|
+| `OnboardingFlow` cycle | 2.4 KB per onboarding controller | ours | fixed |
+| `mlx::core::array::ArrayDesc` cycles | 0.4–1.7 MB per model load | MLX | upstream |
+| `NSXPCConnection` cycles (AppIntents daemon) | 4.7 KB | the system | not ours |
+
+**The onboarding cycle.** `OnboardingModel` set `flow.onChange` to a closure that captured
+`self` weakly but the `flow` argument strongly, so the flow held a closure that held the flow.
+The app builds one controller at launch only to read `isRequired`, and every later Sign In
+builds another; each leaked its flow, network probe, installer and model. The closure now
+reads the flow through `self`. `WindowLifetimeTests` fails on the old code.
+
+**The MLX cycles.** Every root is allocated in `mlx::core::affine_quantize`, reached from
+mlx-swift-lm's `loadWeights` → `quantize(model:)` → `QuantizedLinear` / `QuantizedEmbedding`.
+Quantizing makes three sibling arrays (weights, scales, biases) that hold each other.
+`loadWeights` then replaces them, still unevaluated, with the stored weights through
+`model.update(parameters:)`, which assigns through `mlx_array_set` → `array::operator=`. In
+MLX up to v0.32.2 assignment skips the check in `~array` that breaks a sibling cycle, so the
+three stay alive holding each other. Nothing in this app keeps them: the scorer calls
+`loadModelContainer` once and never touches the quantizer. The fix is upstream in MLX
+(pull request 4453, "Break the sibling cycle when an array is released by assignment"),
+merged after v0.32.2 and not yet in any mlx-swift release; mlx-swift 0.31.6 and mlx-swift-lm
+3.31.4, which this app pins, are the latest releases of both.
+
+The GPU buffers are not part of it. It is CPU bookkeeping, paid once per model load, so it
+only matters to a change that reloads the model.
+
+**The step after visiting every page.** The 125-minute reading rose to 5,224 nodes and
+914 KB. The whole rise was one more `ArrayDesc` cycle of 311 KB plus a few nodes on existing
+roots; no Swift object from any page appeared in the report. Between those two readings the
+suggestion card was also driven, so the new root is a model graph and not a page. Its stack
+was not captured. `WindowLifetimeTests` draws every main-window page and Settings section
+five times and checks that each window's model is released.
+
 ## Latency
 
 Median and slowest of three runs each, with the model already loaded.
