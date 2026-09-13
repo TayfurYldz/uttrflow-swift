@@ -182,7 +182,55 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. The built app: which linked modules can actually open a connection.
+# 5. The suggestion model loads from disk when it is already there.
+# ---------------------------------------------------------------------------
+#
+# `loadModelContainer(from: #hubDownloader(), …)` asks the hub for the repository's file
+# list before it looks in the cache, so it opens a connection on every load of a model that
+# is already whole on disk (#380). The weights are found by `weightsDirectory`, which asks
+# the hub only when the cache is not whole, and loaded from that directory. The hub may be
+# named in the file that decides that, and in the scorer and clean-up model that hand it the
+# downloader, and nowhere else; and no load may take the downloader directly again.
+printf '\nSuggestion model\n'
+
+SNAPSHOT_FILE='Sources/UttrflowLocalModel/CachedSnapshot.swift'
+HUB_ALLOWED="$SNAPSHOT_FILE Sources/UttrflowLocalModel/MLXCandidateScorer.swift Sources/UttrflowLocalModel/MLXCleanupModel.swift"
+if [[ ! -f "$SNAPSHOT_FILE" ]] || ! grep -q 'CachedSnapshot.complete' "$SNAPSHOT_FILE"; then
+    fail "$SNAPSHOT_FILE no longer checks the cache before asking the hub" \
+        "Without it every load of the suggestion model contacts the model host," \
+        "even when every file is already on disk. See Docs/offline.md."
+else
+    pass "the suggestion model's cache is checked before the hub is asked"
+fi
+
+hub_loads="$(grep -rEn -A2 '\bloadModel(Container)?\(' Sources --include='*.swift' \
+    | grep -E 'from: *#hubDownloader|from: *(hub|downloader)\b' || true)"
+if [[ -n "${hub_loads//[[:space:]]/}" ]]; then
+    fail "a model load takes the hub downloader directly" \
+        "That load resolves the repository over the network before it reads the cache." \
+        "Load from weightsDirectory(cache:downloader:onProgress:) instead." \
+        "" $'\n'"$hub_loads"
+else
+    pass "no model load takes the hub downloader directly"
+fi
+
+hub_names="$(grep -rln '#hubDownloader\|HubClient' Sources --include='*.swift' || true)"
+unexpected_hub=""
+for file in $hub_names; do
+    case " $HUB_ALLOWED " in
+    *" $file "*) ;;
+    *) unexpected_hub+="$file " ;;
+    esac
+done
+if [[ -n "${unexpected_hub// /}" ]]; then
+    fail "the model hub client is named somewhere new: ${unexpected_hub% }" \
+        "Only $HUB_ALLOWED may name it."
+else
+    pass "the model hub client is named only where the cache is checked first"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. The built app: which linked modules can actually open a connection.
 # ---------------------------------------------------------------------------
 #
 # The source checks above can only see Uttrflow's own code. This one reads the binary,
