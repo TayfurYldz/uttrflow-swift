@@ -11,6 +11,16 @@ the version the recogniser has been running on since before the document existed
 major-version change to the dictation path that arrived without the measurement argued for
 below, because nothing gates it. The argument still stands; only its premise was stale.
 
+**Nothing gates it, so the version no longer floats.** `Package.swift` now pins WhisperKit
+exactly, for the reason Sparkle is pinned exactly and this one was not: a `from:` range lets
+a dependabot bump change how every dictation is decoded, and until the baseline below exists
+there is nothing that would notice. The pin is not a claim that 1.1.0 is the right version —
+it is a claim that moving off it should be somebody's decision rather than a Tuesday. What
+the repository does assert about the recogniser it links is in `WhisperKitContractTests`:
+the context window, the prompt cap `VocabularyPrompt` sizes itself to, the prefill length
+the timestamp rules count from, and every decoding option the product names. Those fail a
+build when upstream moves them; the words coming out still need the corpus.
+
 ## The finding
 
 **Almost all of it already exists.** The blocker is fifteen minutes of somebody reading
