@@ -268,7 +268,8 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let state = await pipeline.currentState
-        #expect(state.outcome?.text == "W1 X W2 X W3 X")
+        // Three pieces are three sentences, so the chat window's short-message rule leaves the stop on.
+        #expect(state.outcome?.text == "W1 X W2 X W3 X.")
         #expect(state.outcome?.cleanedBy == .foundationModels)
         #expect(await speech.calls == 3)
         let counts = await speech.sampleCounts
@@ -385,7 +386,8 @@ struct DictationPipelineEarlyWorkTests {
         await pipeline.finishRecording()
 
         let state = await pipeline.currentState
-        #expect(state.outcome?.text == "W3 X W2 X W4 X", "the failed piece is redone in its own place")
+        #expect(
+            state.outcome?.text == "W3 X W2 X W4 X.", "the failed piece is redone in its own place")
         #expect(await speech.calls == 4, "only the failed piece and the tail are left for the end")
     }
 
