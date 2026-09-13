@@ -134,7 +134,8 @@ struct PerformanceProfilerTests {
         #expect(report.timedStages == [.transcription])
         #expect(
             report.utterances.first?.unmeasuredStages == [
-                .capture, .drain, .correction, .transformation, .expansion, .insertion,
+                .microphoneOpen, .capture, .drain, .correction, .transformation, .expansion,
+                .insertion,
             ])
     }
 
