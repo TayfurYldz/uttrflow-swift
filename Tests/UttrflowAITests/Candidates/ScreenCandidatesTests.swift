@@ -109,4 +109,37 @@ struct ScreenCandidatesTests {
             for: Draft.Word("a mount", confidence: 0.42), in: .showing(title: "amount owing"))
         #expect(mount == ["amount"])
     }
+
+    // MARK: - One reading of the screen per piece
+
+    /// The batch answer is the source's real answer now, so the two must not be allowed to drift apart.
+    @Test("answers a whole piece exactly as it answers each run on its own")
+    func batchAgreesWithSingleRuns() async {
+        let situation = Situation.showing(
+            title: "PaymentSheet.swift \u{2014} Uttrflow", preceding: "let cache = Cache(")
+        let runs = [
+            Draft.Word("payment sheet", confidence: 0.42), Draft.Word("cash", confidence: 0.42),
+            Draft.Word("nothing like it", confidence: 0.42),
+        ]
+
+        let together = await source.candidates(for: runs, in: situation)
+        var separately: [[String]] = []
+        for run in runs { separately.append(await source.candidates(for: run, in: situation)) }
+
+        #expect(together == separately)
+    }
+
+    /// A source that derives nothing from the screen keeps answering one run at a time, through the default.
+    @Test("gives every run an answer, in the order the runs were asked")
+    func answersEveryRunInOrder() async {
+        let runs = [
+            Draft.Word("payment sheet", confidence: 0.42), Draft.Word("cash", confidence: 0.42),
+        ]
+
+        let found = await source.candidates(
+            for: runs, in: .showing(title: "PaymentSheet.swift", preceding: "let cache = Cache("))
+
+        #expect(found.count == runs.count)
+        #expect(found.first == ["PaymentSheet"])
+    }
 }
