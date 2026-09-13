@@ -14,7 +14,8 @@ enum UttrflowApp {
         let model = MLXCandidateScorer(model: .gemma3)
         let delegate = AppDelegate(
             scoring: model, generating: model,
-            prepareModel: { onProgress in try await model.prepare(onProgress: onProgress) })
+            prepareModel: { onProgress in try await model.prepare(onProgress: onProgress) },
+            releaseModel: { await model.release() })
         application.delegate = delegate
         // Regular, not accessory: Uttrflow has a Dock icon and its window opens at launch.
         application.setActivationPolicy(.regular)

@@ -86,8 +86,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let generating: (any CandidateGenerating)?
     /// Fetches and loads that model's weights, reporting progress, run when tab-to-complete is first built.
     private let prepareModel: (@Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void)?
-    /// Whether the weights have been asked for already, so turning the feature off and on does not ask twice.
+    /// Frees that model's weights, run when tab-to-complete is turned off.
+    private let releaseModel: (@Sendable () async -> Void)?
+    /// Whether the weights have been asked for and not let go since, so turning the feature on twice does not ask twice.
     private var isModelPreparing = false
+    /// Counts each ask and each release, so a load that lands after the feature was turned off reports nothing.
+    private var modelAsk = 0
     /// The latest fetch of those weights, internal so a test can wait for it rather than for the clock.
     private(set) var modelPreparation: Task<Void, Never>?
     /// Which clean-up engines answered that they could run; internal so a test can read it back.
@@ -105,13 +109,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     init(
         container: URL = .applicationSupportDirectory, loginItem: LaunchAtLogin = LaunchAtLogin(),
         scoring: (any CandidateScoring)? = nil, generating: (any CandidateGenerating)? = nil,
-        prepareModel: (@Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void)? = nil
+        prepareModel: (@Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void)? = nil,
+        releaseModel: (@Sendable () async -> Void)? = nil
     ) {
         self.container = container
         self.loginItem = loginItem
         self.scoring = scoring
         self.generating = generating
         self.prepareModel = prepareModel
+        self.releaseModel = releaseModel
         history = DictationHistoryStore(file: DictationHistoryStore.defaultFile(in: container))
         recordings = RecordingStore(directory: RecordingStore.defaultDirectory(in: container))
         dictionary = PersonalDictionaryStore(
@@ -392,17 +398,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let report: @Sendable (Double) -> Void = { [weak self] fraction in
             Task { @MainActor in self?.suggestionModelProgressed(fraction) }
         }
+        modelAsk += 1
+        let ask = modelAsk
+        let previous = modelPreparation
         modelPreparation = Task { [weak self] in
+            // After the release before it, so a quick off and on never frees the weights it just loaded.
+            await previous?.value
             do {
                 try await prepareModel(report)
+                guard self?.modelAsk == ask else { return }
                 self?.suggestionModel = .ready
             } catch {
                 Self.log.error(
                     "the suggestion model did not load: \(String(describing: error), privacy: .public)")
+                guard self?.modelAsk == ask else { return }
                 // Cleared, so turning the feature off and on tries again rather than staying dead all launch.
                 self?.isModelPreparing = false
                 self?.suggestionModel = .failed
             }
+        }
+    }
+
+    /// Lets the weights go once the feature is off, after any load still in flight. See `Docs/performance.md`.
+    private func releaseTheModel() {
+        guard isModelPreparing || suggestionModel == .failed else { return }
+        isModelPreparing = false
+        modelAsk += 1
+        suggestionModel = .notAsked
+        let previous = modelPreparation
+        let releaseModel = releaseModel
+        modelPreparation = Task {
+            await previous?.value
+            await releaseModel?()
         }
     }
 
@@ -417,6 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard settings.suggestions.isEnabled else {
             completions?.stop()
             completions = nil
+            releaseTheModel()
             return
         }
         guard let completions else { return startCompletingWhatIsTyped() }

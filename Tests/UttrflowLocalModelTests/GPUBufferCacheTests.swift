@@ -55,6 +55,15 @@ struct GPUBufferCacheTests {
         #expect(recorder.recorded == ["hold", "clear"])
     }
 
+    @Test("Releasing the model empties the cache and leaves nothing to answer with")
+    func releaseClears() async {
+        let recorder = CacheRecorder()
+        let scorer = MLXCandidateScorer(model: .gemma3, maximumTokens: 16, bufferCache: recorder.control)
+        await scorer.release()
+        #expect(recorder.recorded == ["clear"])
+        #expect(await scorer.isReady == false)
+    }
+
     @Test("The cap is a quarter of a gigabyte")
     func limitIsMeasured() {
         #expect(GPUBufferCache.limit == 256 * 1_048_576)
