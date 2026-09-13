@@ -7,8 +7,8 @@ import SwiftUI
 struct ClipboardDemonstration: View {
     let demonstration: HomeDemonstration
 
-    /// Whether anybody can currently see this; starts true so the animation runs from the first frame.
-    @State private var isVisible = true
+    /// Whether its window is the one being used; starts still so a window opened behind others never moves.
+    @State private var animates = false
 
     /// The width the page offers this card, measured outside the clock so no frame has to ask for it.
     @State private var offeredWidth: CGFloat = 0
@@ -26,9 +26,12 @@ struct ClipboardDemonstration: View {
     /// The card itself, its arrangement settled before the clock starts so a frame only redraws.
     private var card: some View {
         let arrangement = ClipboardDemonstrationMetrics.arrangement(forOfferedWidth: offeredWidth)
-        // Paused when nothing can see it, which is where this card spends most of its life.
-        return TimelineView(.animation(paused: !isVisible)) { timeline in
-            contents(phase: .at(timeline.date), arrangement: arrangement)
+        // Wakes only when the drawing changes, and rests on one frame while its window is not in use.
+        let typedLength = demonstration.chosenRow?.text.count ?? 0
+        return TimelineView(
+            ClipboardDemonstrationSchedule(typedLength: typedLength, isStill: !animates)
+        ) { timeline in
+            contents(phase: animates ? .at(timeline.date) : .resting, arrangement: arrangement)
                 .padding(ClipboardDemonstrationMetrics.padding)
         }
         .cardSurface()
@@ -42,7 +45,7 @@ struct ClipboardDemonstration: View {
             \(demonstration.footnote)
             """
         )
-        .onWindowVisibilityChange { isVisible = $0 }
+        .onWindowAttentionChange { animates = $0 }
     }
 
     /// Side by side while the width holds the document's line, stacked otherwise.
@@ -155,7 +158,7 @@ struct ClipboardDemonstration: View {
     /// What is in the document: what was there, as much of the pasted line as has arrived, then the caret.
     private func typedLine(phase: ClipboardDemonstrationPhase) -> some View {
         let pasted = demonstration.chosenRow?.text ?? ""
-        let shown = String(pasted.prefix(Int((Double(pasted.count) * phase.typed).rounded())))
+        let shown = String(pasted.prefix(phase.typedCount(of: pasted.count)))
         // One `Text` with runs inside it, so the pasted words wrap with the sentence they land in.
         var line = AttributedString(demonstration.existingText)
         line.foregroundColor = .secondary
@@ -163,7 +166,7 @@ struct ClipboardDemonstration: View {
         arriving.foregroundColor = .dockAccent
         arriving.font = .system(size: MainMetrics.footnoteSize, weight: .medium)
         line.append(arriving)
-        if phase.typed > 0 && phase.typed < 1 {
+        if phase.showsCaret {
             var caret = AttributedString("|")
             caret.foregroundColor = .dockAccent
             line.append(caret)
@@ -219,5 +222,15 @@ struct ClipboardDemonstration: View {
         )
         .padding(.horizontal, 4)
         .padding(.vertical, 3)
+    }
+}
+
+/// The demonstration's instants as a `TimelineSchedule`, so the clock follows `ClipboardDemonstrationMoments`.
+private struct ClipboardDemonstrationSchedule: TimelineSchedule {
+    let typedLength: Int
+    let isStill: Bool
+
+    func entries(from startDate: Date, mode: TimelineScheduleMode) -> ClipboardDemonstrationMoments {
+        ClipboardDemonstrationMoments(from: startDate, typedLength: typedLength, isStill: isStill)
     }
 }

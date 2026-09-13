@@ -155,3 +155,137 @@ struct ClipboardDemonstrationPhaseTests {
         }
     }
 }
+
+/// The clock wakes when the drawing changes rather than on every display frame, and misses no change.
+@Suite("The clipboard demonstration's moments")
+struct ClipboardDemonstrationMomentsTests {
+    /// A loop boundary, since 800 is a whole number of eight-second loops.
+    private let loopStart = Date(timeIntervalSinceReferenceDate: 800)
+
+    /// As long as the address the demonstration types, "Flat 402, Example Residences, Bengaluru".
+    private let typedLength = 39
+
+    private func offsets(loops: Double, from start: Date? = nil) -> [Double] {
+        let end = loopStart.addingTimeInterval(ClipboardDemonstrationPhase.loop * loops)
+        return ClipboardDemonstrationMoments(from: start ?? loopStart, typedLength: typedLength)
+            .prefix { $0 < end }
+            .map { $0.timeIntervalSince(loopStart) }
+    }
+
+    /// Everything the view reads from a phase, with the typed line reduced to what is visible of it.
+    private struct Drawn: Equatable {
+        let phase: ClipboardDemonstrationPhase
+        let length: Int
+
+        static func == (lhs: Drawn, rhs: Drawn) -> Bool {
+            lhs.phase.keysAreDown == rhs.phase.keysAreDown
+                && lhs.phase.returnIsDown == rhs.phase.returnIsDown
+                && lhs.phase.selected == rhs.phase.selected
+                && lhs.phase.highlight == rhs.phase.highlight
+                && lhs.phase.panel == rhs.phase.panel
+                && lhs.phase.typedCount(of: lhs.length) == rhs.phase.typedCount(of: rhs.length)
+                && lhs.phase.showsCaret == rhs.phase.showsCaret
+        }
+    }
+
+    private func drawn(at offset: Double) -> Drawn {
+        Drawn(phase: .at(loopStart.addingTimeInterval(offset)), length: typedLength)
+    }
+
+    @Test("draws what the clock would show at every instant, give or take one frame of motion or the nudge")
+    func missesNoChange() {
+        let moments = offsets(loops: 1)
+        let nudge = ClipboardDemonstrationMoments.nudge
+        let boundaries =
+            ClipboardDemonstrationMoments.steps
+            + ClipboardDemonstrationPhase.characterArrivals(length: typedLength)
+        var latest = 0
+        var compared = 0
+        for t in stride(from: 0.0, to: ClipboardDemonstrationPhase.loop, by: 0.0007) {
+            while latest + 1 < moments.count && moments[latest + 1] <= t { latest += 1 }
+            if boundaries.contains(where: { (0..<nudge).contains(t - $0) }) { continue }
+            if ClipboardDemonstrationMoments.motion.contains(where: { $0.contains(t) }) {
+                #expect(t - moments[latest] <= ClipboardDemonstrationMoments.frame + 1e-9)
+            } else {
+                #expect(drawn(at: moments[latest]) == drawn(at: t), "at \(t) seconds into the loop")
+                compared += 1
+            }
+        }
+
+        #expect(compared > 8000)
+    }
+
+    @Test("wakes under a quarter as often as a 120 Hz display redraws over one loop")
+    func wakesLessThanEveryFrame() {
+        let everyFrame = ClipboardDemonstrationPhase.loop * 120
+
+        #expect(Double(offsets(loops: 1).count) < everyFrame * 0.25)
+    }
+
+    @Test("still wakes at the display's rate while the panel rises and goes")
+    func movesSmoothly() {
+        let moments = offsets(loops: 1)
+        for range in [1.0...1.9, 4.3...4.9] {
+            let moving = moments.filter { range.contains($0) }
+            let gaps = zip(moving, moving.dropFirst()).map { $1 - $0 }
+            #expect(moving.count > 60)
+            #expect(gaps.allSatisfy { $0 <= ClipboardDemonstrationMoments.frame + 1e-9 })
+        }
+    }
+
+    @Test("wakes once for each character of the typed line, not once a frame")
+    func wakesPerCharacter() {
+        let typing = offsets(loops: 1).filter { (4.9..<5.9).contains($0) }
+
+        #expect(typing.count == typedLength + 1)
+    }
+
+    @Test("moves forward across loop boundaries, from a start part-way through a loop")
+    func keepsGoingAcrossLoops() {
+        let moments = offsets(loops: 3, from: loopStart.addingTimeInterval(5.95))
+
+        #expect(abs((moments.first ?? 0) - 5.95) < 1e-9)
+        #expect(zip(moments, moments.dropFirst()).allSatisfy { $0 < $1 })
+        #expect(moments.contains { $0 > 16 + 5 })
+    }
+
+    @Test("gives a still card its one instant and nothing after it")
+    func aStillCardWakesOnce() {
+        let moments = ClipboardDemonstrationMoments(from: loopStart, typedLength: 39, isStill: true)
+
+        #expect(Array(moments) == [loopStart])
+    }
+
+    @Test("rests on the panel open with the address row chosen, not on a blank document")
+    func restsOnTheChosenRow() {
+        let resting = ClipboardDemonstrationPhase.resting
+
+        #expect(resting.panel == 1)
+        #expect(resting.selected == 2)
+        #expect(resting.highlight == 1)
+        #expect(resting.typedCount(of: typedLength) == 0)
+        #expect(!resting.showsCaret)
+        #expect(!resting.keysAreDown && !resting.returnIsDown)
+    }
+
+    @Test("puts each character's arrival where the clock first shows it")
+    func arrivalsMatchTheClock() {
+        let arrivals = ClipboardDemonstrationPhase.characterArrivals(length: typedLength)
+
+        #expect(arrivals.count == typedLength)
+        for (index, arrival) in arrivals.enumerated() {
+            let before = ClipboardDemonstrationPhase.at(loopStart.addingTimeInterval(arrival - 1e-6))
+            let after = ClipboardDemonstrationPhase.at(loopStart.addingTimeInterval(arrival + 1e-6))
+            #expect(before.typedCount(of: typedLength) == index)
+            #expect(after.typedCount(of: typedLength) == index + 1)
+        }
+    }
+
+    @Test("has no arrivals for an empty line, and shows the caret only while words arrive")
+    func emptyLineAndCaret() {
+        #expect(ClipboardDemonstrationPhase.characterArrivals(length: 0).isEmpty)
+        #expect(!ClipboardDemonstrationPhase.at(loopStart.addingTimeInterval(4.5)).showsCaret)
+        #expect(ClipboardDemonstrationPhase.at(loopStart.addingTimeInterval(5.2)).showsCaret)
+        #expect(!ClipboardDemonstrationPhase.at(loopStart.addingTimeInterval(6.5)).showsCaret)
+    }
+}
