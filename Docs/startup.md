@@ -30,6 +30,21 @@ That gap is not small. Measured on this Mac with the shipping model
 | first load after boot, cold page cache | **154 s** |
 | every load after that, warm | 2.1 s |
 
+**Where those seconds go is not yet known**, and the load now says so itself. WhisperKit measures
+the parts of its own load — prewarm, encoder and decoder specialisation, encoder and decoder load,
+the tokenizer — and nothing was reading them; `WhisperKitBackend` logs them beside its own total
+under the `speech` category, so a reboot and one dictation produce the breakdown:
+
+```
+log show --last 10m --predicate 'subsystem == "com.uttrflow.Uttrflow" && category == "speech"'
+```
+
+Read it cold, after a reboot and before anything else has touched the model folder — a warm
+reading is the 2.1 s row and says nothing about the problem. Whether the answer is CoreML
+specialising the model or paging 632 MB of weights in decides what is worth doing about it, and
+the two candidates (a compiled artefact produced at install time; a smaller first-run model
+upgraded in the background) trade against each other differently depending on which it is.
+
 Two and a half minutes of a menu bar saying Ready is the whole bug report. The
 presenter was always able to say otherwise — `SpeechModelReadiness` has a
 `downloading` case, `statusLine` renders it, and `canStartDictation` refuses while it is
