@@ -205,11 +205,11 @@ struct AccountChip: View {
 
 extension Color {
     /// The stage's ground and the microphone's well; fixed values, because the stage is dark by design.
-    static let stageGround = Color(rgb: 0x0B_0C10)
-    static let stagePanel = Color(rgb: 0x0E_1016)
-    static let stageWell = Color(rgb: 0x12_141C)
+    static let stageGround = Color(rgb: BrandPalette.Surface.ground.dark)
+    static let stagePanel = Color(rgb: BrandPalette.Surface.card.dark)
+    static let stageWell = Color(rgb: BrandPalette.Surface.well)
     /// The brand teal deepened until white sits legibly on it, for the monogram.
-    static let stageTealDeep = Color(rgb: 0x0A_5F73)
+    static let stageTealDeep = Color(rgb: BrandPalette.Teal.deeper)
 }
 
 /// One figure in the row under the stage, with a comparison beneath when the presenter supplies one.

@@ -197,12 +197,12 @@ enum OnboardingMetrics {
 // MARK: - Colours
 
 extension Color {
-    /// The accent as a foreground in both appearances; the light half clears 4.5:1 on `#F3F2F7`.
-    static let onboardingAccentInk = Color(nsColor: .orbit(dark: 0x5F_E0D3, light: 0x0E_6B64))
+    /// The accent as a foreground in both appearances; the light half clears 4.5:1 on the light ground.
+    static let onboardingAccentInk = Color(nsColor: .orbit(BrandPalette.Teal.ink))
     /// The same, for the pages that are reporting a failure.
-    static let onboardingCautionInk = Color(nsColor: .orbit(dark: 0xFF_B05C, light: 0x9A_4E00))
+    static let onboardingCautionInk = Color(nsColor: .orbit(BrandPalette.Semantic.cautionInk))
     /// A control on the page, one step lifted from the ground, so provider buttons read as buttons.
-    static let onboardingControl = Color(nsColor: .orbit(dark: 0x12_151C, light: 0xFF_FFFF))
+    static let onboardingControl = Color(nsColor: .orbit(BrandPalette.Surface.onboardingControl))
 }
 
 // MARK: - Parts
@@ -295,7 +295,7 @@ private struct Glyph: View {
         case .brand, .success:
             AnyShapeStyle(
                 LinearGradient(
-                    colors: [Color(rgb: 0x33_D6C7), .dockAccent],
+                    colors: [Color(rgb: BrandPalette.Teal.glow), .dockAccent],
                     startPoint: .topLeading, endPoint: .bottomTrailing))
         case .neutral: AnyShapeStyle(Color.dockAccent.opacity(0.12))
         case .caution: AnyShapeStyle(Color.dockWarning.opacity(0.13))

@@ -6,23 +6,23 @@ import SwiftUI
 /// The window's own surfaces, named rather than system greys. See Docs/app-main-window.md.
 extension Color {
     /// The page behind everything.
-    static let mainBackground = Color(nsColor: .orbit(dark: 0x0B_0C10, light: 0xF3_F2F7))
+    static let mainBackground = Color(nsColor: .orbit(BrandPalette.Surface.ground))
     /// A panel on the page: the clipboard rail, the cards the other pages are made of.
-    static let mainCard = Color(nsColor: .orbit(dark: 0x0E_1016, light: 0xFF_FFFF))
+    static let mainCard = Color(nsColor: .orbit(BrandPalette.Surface.card))
     /// Hairlines. Low enough to separate without ruling the page into boxes.
-    static let mainSeparator = Color(nsColor: .orbit(dark: 0x1E_212A, light: 0xE2_E0EA))
+    static let mainSeparator = Color(nsColor: .orbit(BrandPalette.Line.separator))
     /// The row under the pointer.
-    static let mainHover = Color(nsColor: .orbitAlpha(dark: 0xFF_FFFF, light: 0x00_0000, alpha: 0.05))
+    static let mainHover = Color(nsColor: .orbitAlpha(BrandPalette.Surface.wash, alpha: 0.05))
     /// The rail: a step darker than the page in both appearances, so it reads as the edge of the window.
-    static let railGround = Color(nsColor: .orbit(dark: 0x08_090C, light: 0xEA_E9F0))
+    static let railGround = Color(nsColor: .orbit(BrandPalette.Surface.rail))
     /// The lit rail icon's tile.
-    static let railSelection = Color(nsColor: .orbitAlpha(dark: 0xFF_FFFF, light: 0x00_0000, alpha: 0.07))
+    static let railSelection = Color(nsColor: .orbitAlpha(BrandPalette.Surface.wash, alpha: 0.07))
     static let railIcon = Color.secondary
 
     /// The three text tones, set once at the root so every label under it resolves to the design's greys.
-    static let mainText = Color(nsColor: .orbit(dark: 0xF4_F4F6, light: 0x17_1320))
-    static let mainMuted = Color(nsColor: .orbit(dark: 0x8B_90A0, light: 0x6F_6880))
-    static let mainDim = Color(nsColor: .orbit(dark: 0x56_5B68, light: 0xA4_9DB3))
+    static let mainText = Color(nsColor: .orbit(BrandPalette.Text.primary))
+    static let mainMuted = Color(nsColor: .orbit(BrandPalette.Text.muted))
+    static let mainDim = Color(nsColor: .orbit(BrandPalette.Text.dim))
 }
 
 /// A hairline in the design's own colour; `Divider()` is a white wash bright enough to make a list a table.
@@ -50,7 +50,17 @@ extension NSColor {
         }
     }
 
-    /// `0x0B0C10` as an sRGB colour, so the value in the code is the value on the screen.
+    /// A palette tone, resolved per appearance.
+    static func orbit(_ tone: BrandTone) -> NSColor {
+        orbit(dark: tone.dark, light: tone.light)
+    }
+
+    /// A palette tone as a wash.
+    static func orbitAlpha(_ tone: BrandTone, alpha: CGFloat) -> NSColor {
+        orbitAlpha(dark: tone.dark, light: tone.light, alpha: alpha)
+    }
+
+    /// A hex as an sRGB colour, so the value in the code is the value on the screen.
     convenience init(rgb: UInt32) {
         self.init(
             srgbRed: CGFloat((rgb >> 16) & 0xFF) / 255,
@@ -61,7 +71,7 @@ extension NSColor {
 }
 
 extension Color {
-    /// `0x0B0C10` as a fixed sRGB colour, the same in both appearances.
+    /// A hex as a fixed sRGB colour, the same in both appearances.
     init(rgb: UInt32) {
         self.init(
             .sRGB, red: Double((rgb >> 16) & 0xFF) / 255, green: Double((rgb >> 8) & 0xFF) / 255,
@@ -71,7 +81,7 @@ extension Color {
 
 extension NSColor {
     /// The settings callout's ground, dark on dark: a fixed near-white hid the ink. See #147.
-    static let settingsCalloutWash = NSColor.orbit(dark: 0x10_1E1D, light: 0xEF_F8F7)
+    static let settingsCalloutWash = NSColor.orbit(BrandPalette.Teal.calloutWash)
 }
 
 extension NSAppearance {

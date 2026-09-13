@@ -95,7 +95,7 @@ struct OnboardingRail: View {
                     Image(systemName: "checkmark")
                         .font(.system(size: 9, weight: .bold))
                         // The rail's own deep end, so the tick reads as cut out of the ground.
-                        .foregroundStyle(Color(rgb: 0x06_3A35)))
+                        .foregroundStyle(Color(rgb: BrandPalette.Teal.railTick)))
         } else if index == position {
             Circle()
                 .strokeBorder(.white, lineWidth: 2)
@@ -125,9 +125,9 @@ struct RailGround: View {
     var body: some View {
         LinearGradient(
             colors: [
-                Color(rgb: 0x0E_4F49),
-                Color(rgb: 0x09_3B37),
-                Color(rgb: 0x06_2725),
+                Color(rgb: BrandPalette.Teal.railTop),
+                Color(rgb: BrandPalette.Teal.railMiddle),
+                Color(rgb: BrandPalette.Teal.railBottom),
             ],
             startPoint: .top, endPoint: .bottom
         )
