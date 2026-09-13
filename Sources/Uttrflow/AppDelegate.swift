@@ -81,6 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let prepareModel: (@Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void)?
     /// Whether the weights have been asked for already, so turning the feature off and on does not ask twice.
     private var isModelPreparing = false
+    /// The latest fetch of those weights, internal so a test can wait for it rather than for the clock.
+    private(set) var modelPreparation: Task<Void, Never>?
     /// Which clean-up engines answered that they could run; internal so a test can read it back.
     private(set) var transformerAvailability: [TransformerKind: Bool] = [:]
 
@@ -361,7 +363,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let report: @Sendable (Double) -> Void = { [weak self] fraction in
             Task { @MainActor in self?.suggestionModelProgressed(fraction) }
         }
-        Task { [weak self] in
+        modelPreparation = Task { [weak self] in
             do {
                 try await prepareModel(report)
                 self?.suggestionModel = .ready

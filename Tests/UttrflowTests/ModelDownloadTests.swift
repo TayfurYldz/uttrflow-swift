@@ -10,18 +10,10 @@ import UttrflowSettings
 
 /// Counts how many times the weights were asked for, from whichever thread asked.
 private actor Asks {
-    private var count = 0
+    private(set) var count = 0
 
     /// Records one ask, which is what the app's detached task does in place of the real download.
     func asked() { count += 1 }
-
-    /// How many asks have landed, waited for a moment first so a detached task has time to run.
-    func settled(expecting: Int) async -> Int {
-        for _ in 0..<100 where count < expecting {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return count
-    }
 }
 
 /// What a hub that will not answer throws, which is the case the app used to swallow.
@@ -40,7 +32,8 @@ struct ModelDownloadTests {
         let asks = Asks()
         let app = AppDelegate(container: Sandbox().root, prepareModel: { _ in await asks.asked() })
         app.settingsChanged(to: settings(suggesting: false))
-        #expect(await asks.settled(expecting: 1) == 0)
+        #expect(app.modelPreparation == nil)
+        #expect(await asks.count == 0)
     }
 
     @Test("Turning it on asks for them, and turning it off and on again does not ask twice.")
@@ -48,10 +41,14 @@ struct ModelDownloadTests {
         let asks = Asks()
         let app = AppDelegate(container: Sandbox().root, prepareModel: { _ in await asks.asked() })
         app.settingsChanged(to: settings(suggesting: true))
-        #expect(await asks.settled(expecting: 1) == 1)
+        let first = app.modelPreparation
+        await first?.value
+        #expect(await asks.count == 1)
         app.settingsChanged(to: settings(suggesting: false))
         app.settingsChanged(to: settings(suggesting: true))
-        #expect(await asks.settled(expecting: 2) == 1)
+        #expect(app.modelPreparation == first)
+        await app.modelPreparation?.value
+        #expect(await asks.count == 1)
     }
 
     @Test("A fetch that failed is asked for again, rather than leaving the feature dead until a relaunch.")
@@ -65,12 +62,14 @@ struct ModelDownloadTests {
             })
 
         app.settingsChanged(to: settings(suggesting: true))
-        await settle(app, until: .failed)
-        #expect(await asks.settled(expecting: 1) == 1)
+        await app.modelPreparation?.value
+        #expect(app.suggestionModel == .failed)
+        #expect(await asks.count == 1)
 
         app.settingsChanged(to: settings(suggesting: false))
         app.settingsChanged(to: settings(suggesting: true))
-        #expect(await asks.settled(expecting: 2) == 2)
+        await app.modelPreparation?.value
+        #expect(await asks.count == 2)
     }
 
     @Test("What it is doing is readable, so the screen has something to say while it is not ready.")
@@ -84,14 +83,7 @@ struct ModelDownloadTests {
         #expect(app.suggestionModel == .notAsked)
 
         app.settingsChanged(to: settings(suggesting: true))
-        await settle(app, until: .ready)
+        await app.modelPreparation?.value
         #expect(app.suggestionModel == .ready)
-    }
-
-    /// Waits for the app to reach one reading, since the fetch runs beside the test rather than in it.
-    private func settle(_ app: AppDelegate, until readiness: SuggestionModelReadiness) async {
-        for _ in 0..<200 where app.suggestionModel != readiness {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
     }
 }
