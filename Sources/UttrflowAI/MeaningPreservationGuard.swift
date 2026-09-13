@@ -474,10 +474,20 @@ public struct MeaningPreservationGuard: Sendable {
     }
 
     /// The words that reverse a sentence, apostrophes aside; dropping or adding one is the worst edit the model can make.
-    static let negatingWords: Set<String> = [
+    static let negatingWords: Set<String> =
+        englishNegations.union(hindiNegations)
+
+    /// English, with the apostrophes already out, which is the form `matching` carries.
+    static let englishNegations: Set<String> = [
         "not", "no", "never", "none", "nothing", "nobody", "nowhere", "neither", "nor", "cannot",
         "dont", "doesnt", "didnt", "wont", "wouldnt", "cant", "couldnt", "shouldnt", "isnt",
         "arent", "wasnt", "werent", "hasnt", "havent", "hadnt", "mustnt", "aint", "neednt",
+    ]
+
+    /// Hindi in both scripts, since the prompt asks the model to romanise and the negation must survive that.
+    static let hindiNegations: Set<String> = [
+        "\u{0928}\u{0939}\u{0940}\u{0902}", "\u{0928}\u{093E}", "\u{092E}\u{0924}",
+        "nahi", "nahin", "nahee", "na", "mat",
     ]
 
     /// Function words added plus removed, counted as multisets over the whole text.

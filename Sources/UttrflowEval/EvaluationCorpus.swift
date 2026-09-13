@@ -384,6 +384,17 @@ public enum EvaluationCorpus {
             expected: "Are suno zara wo report bhej dena.",
             mustKeep: ["report"]
         ),
+        // The negation is the word whose loss changes the sentence into its opposite.
+        .init(
+            id: "hinglish-negation-kept", category: .multilingual, language: .hindi,
+            spoken: """
+                \u{092E}\u{0941}\u{091D}\u{0947} \u{092F}\u{0939} build \
+                \u{0920}\u{0940}\u{0915} \u{0928}\u{0939}\u{0940}\u{0902} \u{0932}\u{0917} \u{0930}\u{0939}\u{093E}
+                """,
+            expected: "Mujhe yah build theek nahi lag raha.",
+            mustKeep: ["nahi", "build"],
+            mustNotAdd: ["theek lag raha hai"]
+        ),
         .init(
             id: "hinglish-question", category: .multilingual, language: .hindi,
             spoken: "क्या तुम आज का PR review कर सकते हो",
