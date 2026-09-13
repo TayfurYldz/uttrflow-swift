@@ -7,6 +7,9 @@ public struct NumberFormsPass: CleaningPass {
     /// Which spoken numbers this place wants as numerals.
     let policy: NumberPolicy
 
+    /// How this place writes a numeral's digits; somewhere machine-read wants no separators in them.
+    let digits: DigitGrouping
+
     /// Words after which a lone digit is a numeral, digit groups run together, and no separator is used.
     static let contextWords: Set<String> = [
         "port", "version", "extension", "page", "chapter", "step", "number", "line", "section", "figure",
@@ -39,8 +42,9 @@ public struct NumberFormsPass: CleaningPass {
         let spoken: Bool
     }
 
-    public init(policy: NumberPolicy = .fromTen) {
+    public init(policy: NumberPolicy = .fromTen, digits: DigitGrouping = .thousands) {
         self.policy = policy
+        self.digits = digits
     }
 
     public func apply(_ draft: Draft) -> Draft {
@@ -50,7 +54,8 @@ public struct NumberFormsPass: CleaningPass {
         let keys = shapes.map(\.key)
         var position = 0
         while position < live.count {
-            guard let phrase = Self.phrase(at: position, in: shapes, policy: policy) else {
+            guard let phrase = Self.phrase(at: position, in: shapes, policy: policy, digits: digits)
+            else {
                 position += Self.parseOrdinal(at: position, keys: keys, shapes: shapes)?.count ?? 1
                 continue
             }
@@ -65,7 +70,8 @@ public struct NumberFormsPass: CleaningPass {
 
     /// The numeral for the number phrase starting at `position`, or nil when the words stay as they are.
     static func phrase(
-        at position: Int, in shapes: [WordShape], policy: NumberPolicy = .fromTen
+        at position: Int, in shapes: [WordShape], policy: NumberPolicy = .fromTen,
+        digits: DigitGrouping = .thousands
     ) -> Phrase? {
         let keys = shapes.map(\.key)
 
@@ -130,7 +136,8 @@ public struct NumberFormsPass: CleaningPass {
         if !isPhrase, item.spoken, let value = item.value {
             let beforeCurrency = joined(end, shapes) && currencies.contains(keys[end])
             guard policy == .always || inContext || value >= 10 || beforeCurrency else { return nil }
-            text = NumberWords.render(value, grouped: !inContext)
+            // The destination says whether digits are grouped; a context word still runs its own together.
+            text = NumberWords.render(value, grouped: digits == .thousands && !inContext)
         } else if !isPhrase {
             return nil
         }

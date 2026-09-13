@@ -307,4 +307,50 @@ struct NumberWordsTests {
         #expect(NumberWords.render(1_234_567, grouped: true) == "1,234,567")
         #expect(NumberWords.render(1_234_567, grouped: false) == "1234567")
     }
+
+    // MARK: - How the digits are grouped
+
+    /// A separator is prose's habit; Postgres reads 12,000 as a row constructor and a compiler rejects it.
+    @Test(
+        "writes a numeral without separators where the destination is machine-read",
+        arguments: [
+            ("where total is greater than twelve thousand", "where total is greater than 12000"),
+            ("let limit equals twelve thousand", "let limit equals 12000"),
+            ("set the cap to one million", "set the cap to 1000000"),
+        ]
+    )
+    func writesUngroupedDigits(input: String, expected: String) {
+        let sut = NumberFormsPass(policy: .always, digits: .none)
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    @Test(
+        "still groups them where the words are prose",
+        arguments: [
+            ("we sold twelve thousand units", "we sold 12,000 units"),
+            ("the budget is one million", "the budget is 1,000,000"),
+        ]
+    )
+    func groupsDigitsInProse(input: String, expected: String) {
+        let sut = NumberFormsPass(policy: .always, digits: .thousands)
+        #expect(cleaned(input, by: sut) == expected)
+    }
+
+    /// The context word means "these digits run together", which is true whatever the destination does.
+    @Test("runs a context word's digits together in either destination")
+    func contextWordsStillRunTogether() {
+        #expect(
+            cleaned("extension four four two", by: NumberFormsPass(policy: .always, digits: .thousands))
+                == cleaned("extension four four two", by: NumberFormsPass(policy: .always, digits: .none)))
+    }
+
+    @Test("groups digits unless the destination says otherwise")
+    func groupingDefaultsToProse() {
+        #expect(DestinationFormatter.standard(for: .plain).digits == .thousands)
+        #expect(DestinationFormatter.standard(for: .document).digits == .thousands)
+        #expect(DestinationFormatter.standard(for: .sqlEditor).digits == .none)
+        #expect(DestinationFormatter.standard(for: .codeEditor).digits == .none)
+        // A cell keeps its separators: the corpus's own reference for a spreadsheet is "12,000".
+        #expect(DestinationFormatter.standard(for: .spreadsheet).digits == .thousands)
+    }
 }

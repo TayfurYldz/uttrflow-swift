@@ -16,6 +16,14 @@ public enum TerminalStopPolicy: Sendable, Equatable {
     case offForShortMessages(sentences: Int)
 }
 
+/// How a numeral's digits are grouped, which is a separate question from which numbers become numerals.
+public enum DigitGrouping: Sendable, Equatable {
+    /// A separator every three digits from ten thousand up, as prose wants: 12,000.
+    case thousands
+    /// The digits and nothing between them, as anything that will be parsed wants: 12000.
+    case none
+}
+
 /// Which spoken numbers a place wants written as numerals.
 public enum NumberPolicy: Sendable, Equatable {
     /// Every number is a numeral, zero to nine included, as a cell or an editor wants.
@@ -60,13 +68,15 @@ public struct DestinationFormatter: Sendable, Equatable {
     public let grammar: GrammarPolicy
     /// Which spoken numbers become numerals here.
     public let numbers: NumberPolicy
+    /// How a numeral's digits are grouped here, which somewhere machine-read cannot leave to prose habits.
+    public let digits: DigitGrouping
     /// The style rules and worked examples the model is shown for this place.
     public let promptBlock: PromptBlockID
 
     public init(
         destination: Destination, firstWord: FirstWordPolicy, terminalStop: TerminalStopPolicy,
         layout: LayoutPolicy, grammar: GrammarPolicy, numbers: NumberPolicy = .fromTen,
-        promptBlock: PromptBlockID
+        digits: DigitGrouping = .thousands, promptBlock: PromptBlockID
     ) {
         self.destination = destination
         self.firstWord = firstWord
@@ -74,6 +84,7 @@ public struct DestinationFormatter: Sendable, Equatable {
         self.layout = layout
         self.grammar = grammar
         self.numbers = numbers
+        self.digits = digits
         self.promptBlock = promptBlock
     }
 
@@ -88,11 +99,11 @@ public struct DestinationFormatter: Sendable, Equatable {
             grammar: .asSpoken, numbers: .always, promptBlock: "spreadsheet"),
         .sqlEditor: DestinationFormatter(
             destination: .sqlEditor, firstWord: .fromInsertionPoint, terminalStop: .always,
-            layout: .preserveNewlines, grammar: .asSpoken, numbers: .always,
+            layout: .preserveNewlines, grammar: .asSpoken, numbers: .always, digits: .none,
             promptBlock: "sqlEditor"),
         .codeEditor: DestinationFormatter(
             destination: .codeEditor, firstWord: .fromInsertionPoint, terminalStop: .never,
-            layout: .preserveNewlines, grammar: .asSpoken, numbers: .always,
+            layout: .preserveNewlines, grammar: .asSpoken, numbers: .always, digits: .none,
             promptBlock: "codeEditor"),
         .messaging: DestinationFormatter(
             destination: .messaging, firstWord: .fromInsertionPoint,
