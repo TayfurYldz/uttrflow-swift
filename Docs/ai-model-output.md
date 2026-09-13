@@ -31,6 +31,24 @@ so a deleted quote pair is invisible to it.
 | `minimumRetainedFraction` | 0.4 | allows heavy filler removal from a short utterance |
 | `shortUtteranceWords` | 3 | "um yes" may become "Yes."; at six, "what is the capital of france" was exempt and "Paris" slipped through |
 
+## An amount is a number and its symbol
+
+The guard's word tokeniser trims punctuation off both ends of every token, which is right for
+"did this word survive" and wrong for "did this amount survive": "5%" and "5" are the same token,
+and the number check splits on anything that is not a digit, so both sides showed the same digit
+run. A model returning "Revenue grew 5." for "revenue grew 5%" was therefore accepted, and so was
+"$500" written back as "500".
+
+`Quantities.read(in:)` is the second reader: every number a text states, in order, each with the
+symbol attached to it — a currency before, a percent or degree after, with one space tolerated
+because a model writing "5 %" means the percentage. The guard matches the two sides by digits and
+speaks only about the symbol, so what the digits themselves may be stays `inventedNumber`'s
+question. A thousands separator is normalised inside the reader, so 12,000 and 12000 are one
+number and a rewrite may spell it either way.
+
+Two questions with opposite requirements had been sharing one tokeniser; they now have two
+readers, and the word one is unchanged.
+
 ## What the model added, not only what it lost
 
 Every grammar check ran in one direction — kept draft to rewrite — until #188. The survival

@@ -31,6 +31,8 @@ struct GuardMirrorTests {
             "the readings offered are one-sided by construction, and the half that mattered is the invention arm",
         "the rewrite dropped a line break the speaker asked for":
             "an added break is the passes' to settle, per Docs/cleanup-design.md:272",
+        "the rewrite wrote":
+            "an amount is refused whichever way the symbol moved, so the pair is one check rather than two arms",
         "the rewrite changed":
             "the churn allowance is set by the produced side, which PLAN.md records as a corpus measurement still owed",
         "the rewrite composed a list the speaker did not speak":

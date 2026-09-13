@@ -191,6 +191,9 @@ public struct MeaningPreservationGuard: Sendable {
         if let invented = Self.inventedNumber(original: original, rewritten: rewritten) {
             return .rejected(reason: "the rewrite introduced the number \(invented)")
         }
+        if let changed = Self.changedQuantity(original: original, rewritten: rewritten) {
+            return .rejected(reason: "the rewrite wrote \(changed) as another amount")
+        }
         return .accepted
     }
 
@@ -511,6 +514,22 @@ public struct MeaningPreservationGuard: Sendable {
         for number in numberSequence(in: rewritten, reading: englishNumberWords) {
             guard let found = spoken.firstIndex(of: number) else { return number }
             spoken = spoken[(found + 1)...]
+        }
+        return nil
+    }
+
+    /// A number whose symbol the rewrite dropped, changed or invented; the digits alone are `inventedNumber`'s job.
+    static func changedQuantity(original: String, rewritten: String) -> String? {
+        let spoken = Quantities.read(in: original)
+        let written = Quantities.read(in: rewritten)
+        // Matched by digits, so a number the rewrite left alone is compared with the one it came from.
+        var remaining = written
+        for quantity in spoken {
+            guard let place = remaining.firstIndex(where: { $0.digits == quantity.digits }) else {
+                continue
+            }
+            let found = remaining.remove(at: place)
+            if found.symbol != quantity.symbol { return quantity.written }
         }
         return nil
     }
