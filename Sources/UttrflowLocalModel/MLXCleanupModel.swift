@@ -57,6 +57,8 @@ public actor MLXCleanupModel: CleanupModel {
             throw .transformFailed(kind: kind, description: "the local model did not load")
         }
 
+        BufferCacheControl.mlx.hold()
+        defer { BufferCacheControl.mlx.clear() }
         do {
             // A fresh session per utterance, so one sentence cannot bleed into the next.
             let session = ChatSession(
