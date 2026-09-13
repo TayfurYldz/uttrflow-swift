@@ -163,19 +163,8 @@ extension PanelPresenter {
 
         case .formatting(let id, let formatted):
             let original = snapshot.clip(id)?.text ?? ""
-            let changed = TextDiff.changedLines(from: original, to: formatted)
-            return PanelSheetPresentation(
-                kind: .formatting,
-                title: "Format this code?",
-                draft: "",
-                placeholder: "",
-                // The count leads, because the panel cannot show a diff of any size and the number decides.
-                note: "\(changed) line\(changed == 1 ? "" : "s") would change",
-                conflict: nil,
-                collections: [],
-                confirmTitle: "Keep it",
-                isConfirmEnabled: changed > 0,
-                diff: TextDiff.interesting(from: original, to: formatted))
+            return formattingSheet(
+                TextDiff.compare(from: original, to: formatted), changes: original != formatted)
 
         case .confirmingDelete:
             return PanelSheetPresentation(
@@ -189,6 +178,37 @@ extension PanelPresenter {
                 confirmTitle: "Delete",
                 isConfirmEnabled: true)
         }
+    }
+
+    /// The formatting sheet for a diff computed once, or for a pair too large to compare line by line.
+    static func formattingSheet(_ comparison: TextDiff.Comparison, changes: Bool) -> PanelSheetPresentation {
+        let note: String
+        let diff: [TextDiff.Line]
+        let isConfirmEnabled: Bool
+        switch comparison {
+        case .lines(let all):
+            let changed = TextDiff.changedLines(in: all)
+            // The count leads, because the panel cannot show a diff of any size and the number decides.
+            note = "\(changed) line\(changed == 1 ? "" : "s") would change"
+            diff = TextDiff.interesting(in: all)
+            isConfirmEnabled = changed > 0
+        case .tooLarge(let before, let after):
+            note =
+                "Too large to compare line by line: \(before) line\(before == 1 ? "" : "s") before, \(after) after"
+            diff = []
+            isConfirmEnabled = changes
+        }
+        return PanelSheetPresentation(
+            kind: .formatting,
+            title: "Format this code?",
+            draft: "",
+            placeholder: "",
+            note: note,
+            conflict: nil,
+            collections: [],
+            confirmTitle: "Keep it",
+            isConfirmEnabled: isConfirmEnabled,
+            diff: diff)
     }
 
     /// F4 — said only when correction actually changed something.
