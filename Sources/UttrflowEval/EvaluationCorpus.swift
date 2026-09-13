@@ -453,6 +453,10 @@ public enum EvaluationCorpus {
         ),
     ]
 
+    /// A notes document, where a spoken list is laid out and a sentence stays a sentence.
+    static let numberedNotes = AppContext(
+        applicationName: "Pages", bundleIdentifier: "com.apple.iWork.Pages", documentName: "Notes.pages")
+
     // MARK: Context pairs, identical words under two windows. See Docs/eval-context-cases.md.
 
     static let contextual: [EvaluationCase] = [
@@ -807,6 +811,185 @@ public enum EvaluationCorpus {
             destination: .document,
             mustBeginWith: "Bring",
             mustEndWith: "batteries."
+        ),
+        // Issue 238: numbered items another item corroborates, which must still be laid out as a list.
+        .init(
+            id: "numbered-items-for-a-trip", category: .contextual,
+            spoken: "for the trip number one book the hotel number two rent a car",
+            expected: "For the trip\n1. Book the hotel\n2. Rent a car",
+            mustKeep: ["book the hotel", "rent a car"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "For the trip\n"
+        ),
+        .init(
+            id: "numbered-items-three-of-them", category: .contextual,
+            spoken: "today we need number one milk number two eggs number three bread",
+            expected: "Today we need\n1. Milk\n2. Eggs\n3. Bread",
+            mustKeep: ["milk", "eggs", "bread"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Today we need\n"
+        ),
+        .init(
+            id: "numbered-items-a-plan", category: .contextual,
+            spoken: "the plan number one fix the build number two ship it",
+            expected: "The plan\n1. Fix the build\n2. Ship it",
+            mustKeep: ["fix the build", "ship it"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "The plan\n"
+        ),
+        .init(
+            id: "numbered-items-before-lunch", category: .contextual,
+            spoken: "before lunch number one review the draft number two send it to legal",
+            expected: "Before lunch\n1. Review the draft\n2. Send it to legal",
+            mustKeep: ["review the draft", "send it to legal"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Before lunch\n"
+        ),
+        .init(
+            id: "numbered-items-as-digits", category: .contextual,
+            spoken: "things to check number 1 the lights number 2 the brakes",
+            expected: "Things to check\n1. The lights\n2. The brakes",
+            mustKeep: ["lights", "brakes"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Things to check\n"
+        ),
+        .init(
+            id: "numbered-items-an-agenda", category: .contextual,
+            spoken: "the agenda number one budget number two hiring number three travel",
+            expected: "The agenda\n1. Budget\n2. Hiring\n3. Travel",
+            mustKeep: ["budget", "hiring", "travel"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "The agenda\n"
+        ),
+        .init(
+            id: "numbered-items-priorities", category: .contextual,
+            spoken: "priorities this week number one hire a designer number two finish the audit",
+            expected: "Priorities this week\n1. Hire a designer\n2. Finish the audit",
+            mustKeep: ["hire a designer", "finish the audit"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Priorities this week\n"
+        ),
+        .init(
+            id: "numbered-items-steps", category: .contextual,
+            spoken:
+                "to reset it number one unplug the router number two wait a minute number three plug it back in",
+            expected: "To reset it\n1. Unplug the router\n2. Wait a minute\n3. Plug it back in",
+            mustKeep: ["unplug the router", "wait a minute", "plug it back in"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "To reset it\n"
+        ),
+        .init(
+            id: "numbered-items-continuing", category: .contextual,
+            spoken: "then number two call the landlord number three pay the rent",
+            expected: "Then\n2. Call the landlord\n3. Pay the rent",
+            mustKeep: ["call the landlord", "pay the rent"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Then\n"
+        ),
+        .init(
+            id: "numbered-items-reminders", category: .contextual,
+            spoken: "reminders number one water the plants number two feed the cat",
+            expected: "Reminders\n1. Water the plants\n2. Feed the cat",
+            mustKeep: ["water the plants", "feed the cat"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Reminders\n"
+        ),
+        // Issue 238: a designator spoken mid-sentence, which must keep its word and its number.
+        .init(
+            id: "number-ring-not-an-item", category: .contextual,
+            spoken: "please ring number five now",
+            expected: "Please ring number 5 now.",
+            mustKeep: ["number 5"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Please ring number 5"
+        ),
+        .init(
+            id: "number-call-not-an-item", category: .contextual,
+            spoken: "call number seven after lunch",
+            expected: "Call number 7 after lunch.",
+            mustKeep: ["number 7"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Call number 7"
+        ),
+        .init(
+            id: "number-check-not-an-item", category: .contextual,
+            spoken: "check number three again before we leave",
+            expected: "Check number 3 again before we leave.",
+            mustKeep: ["number 3"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Check number 3"
+        ),
+        .init(
+            id: "number-bus-not-an-item", category: .contextual,
+            spoken: "take bus number twelve to the station",
+            expected: "Take bus number 12 to the station.",
+            mustKeep: ["number 12"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Take bus number 12"
+        ),
+        .init(
+            id: "number-row-not-an-item", category: .contextual,
+            spoken: "my seat is row number eight near the window",
+            expected: "My seat is row number 8 near the window.",
+            mustKeep: ["number 8"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "My seat is row number 8"
+        ),
+        .init(
+            id: "number-invoice-not-an-item", category: .contextual,
+            spoken: "invoice number forty two is still unpaid",
+            expected: "Invoice number 42 is still unpaid.",
+            mustKeep: ["number 42"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Invoice number 42"
+        ),
+        .init(
+            id: "number-gate-not-an-item", category: .contextual,
+            spoken: "meet me at gate number nine after security",
+            expected: "Meet me at gate number 9 after security.",
+            mustKeep: ["number 9"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Meet me at gate number 9"
+        ),
+        .init(
+            id: "number-platform-not-an-item", category: .contextual,
+            spoken: "platform number four has the delayed train",
+            expected: "Platform number 4 has the delayed train.",
+            mustKeep: ["number 4"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Platform number 4"
+        ),
+        .init(
+            id: "number-flight-not-an-item", category: .contextual,
+            spoken: "flight number 447 is delayed again",
+            expected: "Flight number 447 is delayed again.",
+            mustKeep: ["number 447"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Flight number 447"
+        ),
+        .init(
+            id: "number-room-not-an-item", category: .contextual,
+            spoken: "room number 210 is free all afternoon",
+            expected: "Room number 210 is free all afternoon.",
+            mustKeep: ["number 210"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Room number 210"
+        ),
+        .init(
+            id: "number-press-not-an-item", category: .contextual,
+            spoken: "press number two to speak to someone",
+            expected: "Press number 2 to speak to someone.",
+            mustKeep: ["number 2"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Press number 2"
+        ),
+        .init(
+            id: "number-jersey-not-an-item", category: .contextual,
+            spoken: "jersey number ten scored twice",
+            expected: "Jersey number 10 scored twice.",
+            mustKeep: ["number 10"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Jersey number 10"
         ),
         .init(
             id: "spreadsheet-number-in-cell", category: .contextual,

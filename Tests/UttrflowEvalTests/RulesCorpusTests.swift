@@ -35,6 +35,14 @@ struct RulesCorpusTests {
         "code-editor-line-break-preserved", "code-editor-numeral-no-stop",
         "message-short-no-stop", "email-greeting-kept", "email-continues-mid-sentence",
         "email-two-paragraphs",
+        "numbered-items-for-a-trip", "numbered-items-three-of-them", "numbered-items-a-plan",
+        "numbered-items-before-lunch", "numbered-items-as-digits", "numbered-items-an-agenda",
+        "numbered-items-priorities", "numbered-items-steps", "numbered-items-continuing",
+        "numbered-items-reminders", "number-ring-not-an-item", "number-call-not-an-item",
+        "number-check-not-an-item", "number-bus-not-an-item", "number-row-not-an-item",
+        "number-invoice-not-an-item", "number-gate-not-an-item", "number-platform-not-an-item",
+        "number-flight-not-an-item", "number-room-not-an-item", "number-press-not-an-item",
+        "number-jersey-not-an-item",
     ]
 
     /// Destination cases only the model can pass: a spelling off the screen, or a question mark from a sentence's shape.
@@ -65,7 +73,7 @@ struct RulesCorpusTests {
         // Grammar cases name a destination too, but repairs are the model's alone; the floor is below.
         let named = Set(
             EvaluationCorpus.all.filter { $0.destination != .plain && $0.category != .grammar }.map(\.id))
-        #expect(named.count == 28)
+        #expect(named.count == 50)
         #expect(named.subtracting(Self.modelOnly).isSubset(of: Self.rulesMustPass))
         #expect(Self.modelOnly.isSubset(of: named))
         #expect(Self.modelOnly.isDisjoint(with: Self.rulesMustPass))
