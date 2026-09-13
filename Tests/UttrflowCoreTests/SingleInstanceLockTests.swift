@@ -17,20 +17,22 @@ struct SingleInstanceLockTests {
         return false
     }
 
-    /// Starts a separate process that holds `file` until killed, returning once it says it holds it.
-    private func holder(of file: URL) throws -> Process {
+    /// Starts a separate process that holds `file` for `seconds` and exits, returning once it says it holds it.
+    private func holder(of file: URL, forSeconds seconds: Double = 60) throws -> Process {
         let script = """
             import fcntl, sys, time
             f = open(sys.argv[1], "a")
             fcntl.flock(f, fcntl.LOCK_EX)
             print("held", flush=True)
-            time.sleep(60)
+            time.sleep(float(sys.argv[2]))
             """
         try FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let process = Process()
         process.executableURL = URL(filePath: "/usr/bin/env")
-        process.arguments = ["python3", "-c", script, file.path(percentEncoded: false)]
+        process.arguments = [
+            "python3", "-c", script, file.path(percentEncoded: false), String(seconds),
+        ]
         let output = Pipe()
         process.standardOutput = output
         try process.run()
@@ -57,13 +59,16 @@ struct SingleInstanceLockTests {
         let folder = temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = SingleInstanceLock.defaultFile(in: folder)
-        var first: SingleInstanceLock? = {
-            if case .acquired(let lock) = SingleInstanceLock.acquire(at: file) { return lock }
-            return nil
-        }()
-        #expect(first != nil)
-        #expect(isHeldElsewhere(SingleInstanceLock.acquire(at: file)))
-        first = nil
+        // Scoped, so the first lock is freed at the brace and nothing else can keep it alive.
+        do {
+            guard case .acquired(let first) = SingleInstanceLock.acquire(at: file) else {
+                Issue.record("the first acquire did not take the lock")
+                return
+            }
+            let second = SingleInstanceLock.acquire(at: file)
+            withExtendedLifetime(first) {}
+            #expect(isHeldElsewhere(second))
+        }
         guard case .acquired = SingleInstanceLock.acquire(at: file) else {
             Issue.record("releasing the first lock did not free it")
             return
@@ -95,12 +100,11 @@ struct SingleInstanceLockTests {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = SingleInstanceLock.defaultFile(in: folder)
-        let process = try holder(of: file)
+        // The holder quits on its own, so nothing here depends on another thread being scheduled in time.
+        let process = try holder(of: file, forSeconds: 1.5)
         defer { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+        #expect(isHeldElsewhere(SingleInstanceLock.acquire(at: file)))
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
-            kill(process.processIdentifier, SIGTERM)
-        }
         let outcome = SingleInstanceLock.acquire(at: file, waitingUpTo: .seconds(20))
         guard case .acquired = outcome else {
             Issue.record("the wait gave up before the holder exited")
