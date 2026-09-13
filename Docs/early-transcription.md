@@ -109,7 +109,9 @@ diagnostics page reports what the user waited for, and nobody waited for these.
 up is finished rather than thrown away, and the user waits through that — it begins after they
 let go. It is charged to a stage of its own (`.drain`, "Finishing the piece already under way"),
 recorded only when there is something in flight, so a dictation too short to have worked ahead
-gains no row. What is still not charged to anyone is the work that finished before the key came
+gains no row. In flight means from the moment the piece is handed to the recogniser until it is
+tidied: recognition is usually the longer half, and a key released during it was once charged to
+nothing at all. What is still not charged to anyone is the work that finished before the key came
 up, which is the decision this paragraph records.
 
 When the key comes up, a piece under way is finished rather than thrown away, and the
