@@ -9,6 +9,8 @@ public struct HotkeyRecogniser: Sendable, Equatable {
 
     /// The press-and-release rule, shared with every other thing that watches a key go down.
     private var edge = HeldModifierEdge()
+    /// Whether the held modifiers were used by another shortcut, which lasts until every modifier is up.
+    private var isSpoiled = false
 
     public init(binding: HotkeyBinding) {
         self.binding = binding
@@ -16,7 +18,8 @@ public struct HotkeyRecogniser: Sendable, Equatable {
 
     /// The press or release this stroke completes, or nothing when the state did not change.
     public mutating func receive(_ stroke: KeyStroke) -> HotkeyEvent? {
-        guard !binding.isFunctionHold else { return receiveFunctionHold(stroke) }
+        if binding.isFunctionHold { return receiveFunctionHold(stroke) }
+        if binding.heldModifier != nil { return receiveModifierHold(stroke) }
         return settle(matches(stroke))
     }
 
@@ -24,6 +27,20 @@ public struct HotkeyRecogniser: Sendable, Equatable {
     private mutating func receiveFunctionHold(_ stroke: KeyStroke) -> HotkeyEvent? {
         guard stroke.phase == .modifiersChanged else { return nil }
         return settle(stroke.isFunctionDown)
+    }
+
+    /// Modifiers held alone, withdrawn when a key or another modifier shows they begin a different shortcut.
+    private mutating func receiveModifierHold(_ stroke: KeyStroke) -> HotkeyEvent? {
+        if stroke.modifiers.isEmpty { isSpoiled = false }
+        if beginsAnotherShortcut(stroke) { isSpoiled = true }
+        guard isSpoiled else { return settle(matches(stroke)) }
+        return edge.stopped() == nil ? nil : .cancelled
+    }
+
+    /// Whether this stroke uses the held modifiers for something else: a key typed, or a modifier the binding lacks.
+    private func beginsAnotherShortcut(_ stroke: KeyStroke) -> Bool {
+        if stroke.phase == .down, !stroke.modifiers.isEmpty { return true }
+        return !stroke.modifiers.isSubset(of: heldModifiers)
     }
 
     /// A release owed because watching stopped mid-hold, or nothing when nothing was held.
@@ -40,6 +57,11 @@ public struct HotkeyRecogniser: Sendable, Equatable {
         // A combination is down while its key is down and exactly its modifiers are held.
         return stroke.phase == .down && stroke.keyCode == binding.keyCode
             && stroke.modifiers == binding.modifiers
+    }
+
+    /// The modifiers a held binding is made of, its own key's included.
+    private var heldModifiers: Set<HotkeyModifier> {
+        binding.modifiers.union(modifiersOfHeldKey)
     }
 
     /// The modifier a held binding's own key code is, so ⌘ held alone reads as ⌘.

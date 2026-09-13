@@ -9,6 +9,9 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
     /// Two slips closer together than this are one double tap. See Docs/pipeline-gestures.md.
     public static var doubleTapWindow: Duration { .milliseconds(450) }
 
+    /// How long modifiers bound alone must be held before they count, so another shortcut's key can arrive first.
+    public static var modifierSettle: Duration { minimumHold }
+
     private let pipeline: DictationPipeline
     private let monitor: any HotkeyMonitoring
     /// Sounds the start only; the capture engine sounds the stop, once the microphone has closed.
@@ -25,10 +28,22 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
     private var lastTapEndedAt: ClockType.Instant?
     /// Whether the microphone was left open by a double tap, and so waits for another to close it.
     private var isHandsFree = false
+    /// The shortcut being watched, which decides whether a press waits to settle.
+    private var binding: HotkeyBinding?
+    /// A press of modifiers bound alone that has not been held long enough to count yet.
+    private var unsettledPress: (id: Int, at: ClockType.Instant)?
+    private var nextPressID = 0
+    private var settleTask: Task<Void, Never>?
+    /// Whether the press in progress opened the microphone, and so what withdrawing it has to undo.
+    private var pressOpenedTheMicrophone = false
     /// A key event, or a click that has no release and is told when it has been handled.
     private enum Gesture: Sendable {
         case key(HotkeyEvent)
         case control(CheckedContinuation<Void, Never>)
+        /// The press with this id has been held long enough to count.
+        case settled(Int)
+        /// Answered once everything queued ahead of it has been handled.
+        case drained(CheckedContinuation<Void, Never>)
     }
 
     /// Every gesture from every source, handled one at a time. See Docs/pipeline-gestures.md.
@@ -57,8 +72,11 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         Task { [weak self] in
             for await gesture in queued {
                 guard let self else {
-                    // A click still waiting is answered, so its caller is not left suspended forever.
-                    if case .control(let handled) = gesture { handled.resume() }
+                    // A caller still waiting is answered, so it is not left suspended forever.
+                    switch gesture {
+                    case .control(let handled), .drained(let handled): handled.resume()
+                    case .key, .settled: break
+                    }
                     continue
                 }
                 switch gesture {
@@ -66,6 +84,10 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
                     await handle(event)
                 case .control(let handled):
                     await toggleListening()
+                    handled.resume()
+                case .settled(let id):
+                    await settle(id)
+                case .drained(let handled):
                     handled.resume()
                 }
             }
@@ -89,10 +111,13 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
 
     /// Watches for the shortcut, or rebinds to another one. See Docs/pipeline-gestures.md.
     public func start(binding: HotkeyBinding) async throws(HotkeyError) {
+        forgetUnsettledPress()
+        self.binding = binding
         try await monitor.start(binding: binding)
     }
 
     public func stop() {
+        forgetUnsettledPress()
         stopWatchingTheLimit()
         // Stopped last, so the release it owes for a hold still reaches the forwarder.
         monitor.stop()
@@ -107,21 +132,127 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
     // MARK: Events
 
     public func handle(_ event: HotkeyEvent) async {
+        if let unsettled = unsettledPress {
+            await resolveUnsettledPress(unsettled, with: event)
+            return
+        }
         switch (activation, event) {
-        case (.holdToTalk, .pressed):
-            pressedAt = clock.now
-            // Hands-free is already listening; pressing again is the start of the gesture that ends it.
-            if !isHandsFree { await beginListening() }
+        case (_, .pressed) where waitsToSettle:
+            holdBack()
+
+        case (_, .pressed):
+            await press(at: clock.now)
 
         case (.holdToTalk, .released):
             await endHold()
 
-        case (.pressToToggle, .pressed):
-            await toggleListening()
-
         // Releasing does nothing in toggle mode: the next press is what stops it.
         case (.pressToToggle, .released):
             break
+
+        case (_, .cancelled):
+            await withdrawPress()
+        }
+    }
+
+    /// Whether a press waits to settle, which only modifiers bound alone do; Fn is read from its own flag.
+    private var waitsToSettle: Bool {
+        guard let binding else { return false }
+        return binding.heldModifier != nil && !binding.isFunctionHold
+    }
+
+    /// Acts on a press once it counts, measured from when the keys went down.
+    private func press(at instant: ClockType.Instant) async {
+        switch activation {
+        case .holdToTalk:
+            pressedAt = instant
+            // Hands-free is already listening; pressing again is the start of the gesture that ends it.
+            guard !isHandsFree else {
+                pressOpenedTheMicrophone = false
+                return
+            }
+            await beginListening()
+            pressOpenedTheMicrophone = await pipeline.currentState.isListening
+        case .pressToToggle:
+            let wasListening = await pipeline.currentState.isListening
+            await toggleListening()
+            let isListening = await pipeline.currentState.isListening
+            pressOpenedTheMicrophone = !wasListening && isListening
+        }
+    }
+
+    /// Waits out the settle before a press of modifiers alone counts. See `Docs/shortcuts.md`.
+    private func holdBack() {
+        nextPressID += 1
+        let id = nextPressID
+        let pressedAt = clock.now
+        unsettledPress = (id, pressedAt)
+        let deadline = pressedAt.advanced(by: Self.modifierSettle)
+        settleTask = Task { [clock, gestureSink] in
+            do {
+                try await clock.sleep(until: deadline, tolerance: nil)
+            } catch {
+                // Cancelled, because the press was released or withdrawn before it settled.
+                return
+            }
+            gestureSink.yield(.settled(id))
+        }
+    }
+
+    /// Makes the press count, unless it was released or withdrawn while it waited.
+    private func settle(_ id: Int) async {
+        guard let unsettled = unsettledPress, unsettled.id == id else { return }
+        forgetUnsettledPress()
+        await press(at: unsettled.at)
+    }
+
+    /// A release or withdrawal that arrived before the press settled.
+    private func resolveUnsettledPress(
+        _ unsettled: (id: Int, at: ClockType.Instant), with event: HotkeyEvent
+    ) async {
+        switch (activation, event) {
+        // Another press cannot arrive before a release, so a repeat is only a duplicate.
+        case (_, .pressed):
+            return
+        case (_, .cancelled):
+            forgetUnsettledPress()
+        case (.holdToTalk, .released):
+            forgetUnsettledPress()
+            await endTapThatNeverOpened()
+        case (.pressToToggle, .released):
+            forgetUnsettledPress()
+            await press(at: unsettled.at)
+        }
+    }
+
+    private func forgetUnsettledPress() {
+        settleTask?.cancel()
+        settleTask = nil
+        unsettledPress = nil
+    }
+
+    /// Undoes what a press opened, without inserting anything, because its keys began another shortcut.
+    private func withdrawPress() async {
+        pressedAt = nil
+        guard pressOpenedTheMicrophone else { return }
+        pressOpenedTheMicrophone = false
+        guard await pipeline.currentState.isListening, !isHandsFree else { return }
+        stopWatchingTheLimit()
+        await pipeline.cancel()
+    }
+
+    /// Suspends until a waiting press has settled or been forgotten, which only the clock can decide.
+    func settling() async {
+        await settleTask?.value
+    }
+
+    /// Suspends until every gesture queued so far has been handled.
+    func drained() async {
+        await withCheckedContinuation { handled in
+            guard case .enqueued = gestureSink.yield(.drained(handled)) else {
+                handled.resume()
+                return
+            }
         }
     }
 
@@ -209,6 +340,19 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         guard !isHandsFree else { return }
         stopWatchingTheLimit()
         await pipeline.finishRecording()
+    }
+
+    /// A tap too short to settle, counted towards a double tap without opening the microphone for one.
+    private func endTapThatNeverOpened() async {
+        let now = clock.now
+        guard let last = lastTapEndedAt, last.duration(to: now) < Self.doubleTapWindow else {
+            lastTapEndedAt = now
+            return
+        }
+        lastTapEndedAt = nil
+        guard !isHandsFree else { return await stopHandsFree() }
+        await beginListening()
+        isHandsFree = await pipeline.currentState.isListening
     }
 
     /// Closes a microphone a double tap left open, which another double tap is the only way to do.
