@@ -82,3 +82,151 @@ struct TextDiffTests {
         #expect(TextDiff.changedLines(from: before, to: after) == 2)
     }
 }
+
+@Suite("D6 · the formatter diff in bounded time and memory")
+struct TextDiffScalingTests {
+    /// The steps one guarded comparison takes.
+    private static func steps(from before: String, to after: String) -> Int {
+        let tally = DiffTally()
+        TextDiff.$tally.withValue(tally) { _ = TextDiff.compare(from: before, to: after) }
+        return tally.count
+    }
+
+    /// A text of distinct numbered lines, with every `every`th one indented.
+    private static func text(lines: Int, indentingEvery every: Int = 0) -> String {
+        (0..<lines).map { every > 0 && $0 % every == every - 1 ? "    line \($0) {" : "line \($0) {" }
+            .joined(separator: "\n")
+    }
+
+    @Test("A few changed lines cost steps in proportion to the text, not to its square")
+    func fewChangesCostLinearWork() {
+        let small = Self.steps(
+            from: Self.text(lines: 1_000), to: Self.text(lines: 1_000, indentingEvery: 250))
+        let large = Self.steps(
+            from: Self.text(lines: 10_000), to: Self.text(lines: 10_000, indentingEvery: 2_500))
+
+        #expect(small > 0 && large > 0, "the tally must be connected")
+        #expect(small <= 20 * 1_000, "1,000 lines took \(small) steps")
+        #expect(large <= 20 * 10_000, "10,000 lines took \(large) steps")
+    }
+
+    @Test("A pair past the change limit stops looking, having spent at most the limit's work")
+    func manyChangesStopAtTheLimit() {
+        let lines = TextDiff.changeLimit
+        let before = Self.text(lines: lines)
+        let after = Self.text(lines: lines, indentingEvery: 1)
+        let limit = TextDiff.changeLimit
+
+        #expect(TextDiff.compare(from: before, to: after) == .tooLarge(before: lines, after: lines))
+        let steps = Self.steps(from: before, to: after)
+        #expect(steps > 0)
+        #expect(steps <= limit * limit + 4 * lines)
+    }
+
+    @Test("A pair past the line or byte limit is refused before any diff is taken")
+    func sizeLimitsRefuseUpFront() {
+        let long = Array(repeating: "x", count: TextDiff.lineLimit + 1).joined(separator: "\n")
+        let wide = String(repeating: "x", count: TextDiff.byteLimit + 1)
+
+        #expect(TextDiff.compare(from: long, to: "x") == .tooLarge(before: TextDiff.lineLimit + 1, after: 1))
+        #expect(TextDiff.compare(from: "x", to: wide) == .tooLarge(before: 1, after: 1))
+        #expect(Self.steps(from: long, to: "x") == 0)
+    }
+
+    @Test("A pair inside every limit is compared line by line")
+    func smallPairsAreCompared() {
+        #expect(
+            TextDiff.compare(from: "a\nb", to: "a\nc")
+                == .lines([
+                    .init(kind: .same, text: "a"), .init(kind: .removed, text: "b"),
+                    .init(kind: .added, text: "c"),
+                ]))
+    }
+
+    @Test("Every small pair gets the same lines as the full table, and the fewest changes")
+    func agreesWithTheTable() {
+        var random = DiffSeeded(seed: 406)
+        for _ in 0..<20_000 {
+            let alphabet = Array(["a", "b", "c", ""].prefix(Int.random(in: 1...4, using: &random)))
+            let before = (0..<Int.random(in: 0...10, using: &random)).map { _ in
+                alphabet.randomElement(using: &random) ?? ""
+            }
+            let after = (0..<Int.random(in: 0...10, using: &random)).map { _ in
+                alphabet.randomElement(using: &random) ?? ""
+            }
+            let old = before.joined(separator: "\n")
+            let new = after.joined(separator: "\n")
+            let lines = TextDiff.lines(from: old, to: new)
+            let table = TableDiff.lines(from: old, to: new)
+
+            #expect(lines == table.lines, "\(old.debugDescription) → \(new.debugDescription)")
+            #expect(TextDiff.changedLines(in: lines) == table.fewestChanges)
+            #expect(
+                lines.filter { $0.kind != .added }.map(\.text)
+                    == old.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+            #expect(
+                lines.filter { $0.kind != .removed }.map(\.text)
+                    == new.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+        }
+    }
+
+    @Test("Interesting lines are the changes and their context, in order")
+    func interestingKeepsOrder() {
+        let all: [TextDiff.Line] = ["a", "b", "c", "d", "e", "f"].enumerated().map { index, text in
+            .init(kind: index == 0 || index == 4 ? .added : .same, text: text)
+        }
+
+        #expect(TextDiff.interesting(in: all).map(\.text) == ["a", "b", "d", "e", "f"])
+        #expect(TextDiff.interesting(in: all, context: 0).map(\.text) == ["a", "e"])
+        #expect(TextDiff.interesting(in: all, context: -1).map(\.text) == ["a", "e"])
+        #expect(TextDiff.interesting(in: []).isEmpty)
+    }
+}
+
+/// A fixed-seed generator, so every generated pair is the same on every run.
+private struct DiffSeeded: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: Int) { state = (UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) | 1 }
+
+    mutating func next() -> UInt64 {
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        return state
+    }
+}
+
+/// The full longest-common-subsequence table the linear-space diff replaced, kept as its oracle.
+private enum TableDiff {
+    static func lines(from before: String, to after: String) -> (lines: [TextDiff.Line], fewestChanges: Int) {
+        let old = before.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let new = after.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var common = Array(repeating: Array(repeating: 0, count: new.count + 1), count: old.count + 1)
+        for i in stride(from: old.count - 1, through: 0, by: -1) {
+            for j in stride(from: new.count - 1, through: 0, by: -1) {
+                common[i][j] =
+                    old[i] == new[j] ? common[i + 1][j + 1] + 1 : max(common[i + 1][j], common[i][j + 1])
+            }
+        }
+        var result: [TextDiff.Line] = []
+        var i = 0
+        var j = 0
+        while i < old.count && j < new.count {
+            if old[i] == new[j] {
+                result.append(.init(kind: .same, text: old[i]))
+                i += 1
+                j += 1
+            } else if common[i + 1][j] >= common[i][j + 1] {
+                result.append(.init(kind: .removed, text: old[i]))
+                i += 1
+            } else {
+                result.append(.init(kind: .added, text: new[j]))
+                j += 1
+            }
+        }
+        result += old[i...].map { .init(kind: .removed, text: $0) }
+        result += new[j...].map { .init(kind: .added, text: $0) }
+        return (result, old.count + new.count - 2 * common[0][0])
+    }
+}

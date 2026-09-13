@@ -844,6 +844,27 @@ four `.mlmodelc` bundles and it pays that every time a recogniser is constructed
 recogniser must be constructed **once** and kept. It already is — `BackedSpeechEngine`
 loads once and guards it.
 
+## Reading a terminal line for its prompt
+
+`ShellPrompt.input` runs on the main actor each suggestion turn in a terminal, so its cost is
+bounded rather than left to the length of the line. It reads the line once, carrying forward
+what each terminator needs to know about the text before it, and looks for a prompt only in
+the first `ShellPrompt.searchLimit` (4,096) characters, since a prompt is short and a pasted
+line need not be. A terminator past that point is not taken for a prompt.
+
+Release build, a line of `ab# ` repeated, best of 20 runs (one run at 100 KB and over), on a
+machine at load average 100 to 275, so the old column is inflated and its growth is not:
+
+| line | before | after |
+|---|---|---|
+| 1 KB | 0.32 ms | 0.05 ms |
+| 10 KB | 27 ms | 0.20 ms |
+| 100 KB | 15.3 s | 0.37 ms |
+| 1 MB | not run (quadratic, extrapolated at about 25 minutes) | 0.36 ms |
+
+`ShellPromptScalingTests` counts characters read through `ShellPrompt.tally` rather than
+timing: the previous reading took 2,004,000 reads for a 4,000-character line.
+
 ## Disk
 
 ```
@@ -856,6 +877,40 @@ The model is measured on disk (645.7 MB across 4 `.mlmodelc` bundles plus two JS
 files), not taken from the catalogue. The application is the signed bundle from
 `make app`. A fresh install is therefore **660 MB**, of which 98% is the speech model
 and all of it is downloaded on first launch rather than shipped.
+
+## Showing what a formatter changed
+
+The formatting sheet diffs the clip against the formatter's output once per presentation, on
+the main actor, and a kept clip may be 2 MB. `TextDiff` finds the fewest changed lines with a
+edit-distance search over layers of furthest-reaching points, as in the O(n × d) algorithm,
+whose memory grows with the changes rather than with the product of the two texts' lengths. It
+then walks from the top choosing at each change exactly what the full table did: equal lines
+first, and a removal before an addition whenever both are shortest. The walk needs the layers
+deepest first, so every 32nd layer is kept and each stretch of 32 is rebuilt from it. That
+costs about one more pass, and the kept layers grow with the square of the changes, about
+d² / 64 integers: 2 MB at the 4,000-change limit. Every public entry point goes through that
+limit.
+
+`TextDiff.compare` refuses up front a text over 20,000 lines or 1 MB, and stops looking past
+4,000 changed lines; the sheet then states both line counts instead of a diff.
+
+Release build, best single run, peak footprint from `/usr/bin/time -l`, on a machine at load
+average 80 to 250. "Every line" indents all of them, "one in fifty" indents every fiftieth:
+
+| lines | shape | before | after |
+|---|---|---|---|
+| 100 | every line | 0.3 ms, 2.0 MB | 0.8 ms, 2.1 MB |
+| 1,000 | every line | 12 ms, 10.6 MB | 13 ms, 6.9 MB |
+| 1,999 | every line, 3,998 changes | 42 ms, 36 MB | 53 ms, 12.7 MB |
+| 5,000 | every line | 1.16 s, 308 MB | 34 ms, 6.9 MB, too large |
+| 20,000 | every line | 9.9 s, 3.9 GB | 38 ms, 14 MB, too large |
+| 1,000 | one in fifty | 9.8 ms, 10.3 MB | 0.6 ms, 2.3 MB |
+| 5,000 | one in fifty | 231 ms, 341 MB | 3.0 ms, 3.5 MB |
+| 20,000 | one in fifty | 7.3 s, 4.1 GB | 14 ms, 10 MB |
+
+Both columns are what one sheet costs: before, that was two runs of the table.
+`TextDiffScalingTests` counts steps through `TextDiff.tally` rather than timing, and compares
+the diff with the table on 20,000 random small pairs.
 
 ## Suggestions under Low Power Mode and thermal pressure
 
