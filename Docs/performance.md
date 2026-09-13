@@ -368,10 +368,10 @@ Two changes, both in `Sources/Uttrflow/Main/`:
   the feature is.
 - **Its clock wakes when the drawing changes, not on every display frame.**
   `ClipboardDemonstrationMoments` is the card's `TimelineSchedule`. Of the eight-second loop,
-  only the panel rising (0.9 s) and going (0.6 s) move continuously, and those still get an
-  instant every 1/120 s. The typed line wakes once per character, and everything else is a
-  still state that wakes once, at its boundary. That is 228 wakes a loop instead of 960 at
-  120 Hz. `ClipboardDemonstrationMomentsTests` checks that the instant drawn matches what the
+  only the panel rising (0.9 s) and going (0.6 s) move continuously, and those got an
+  instant every 1/120 s, now every 1/30 s (below). The typed line wakes once per character, and
+  everything else is a still state that wakes once, at its boundary. That was 226 wakes a loop
+  instead of 960 at 120 Hz. `ClipboardDemonstrationMomentsTests` checks that the instant drawn matches what the
   clock would show everywhere outside the moving stretches.
 
 ### Measured, before and after
@@ -420,8 +420,40 @@ without per-character typing at 12.6–18.8% across two runs:
 None is distinguishable from noise of about ±5 points, so none is in the code. Per-character
 typing is: over 64 seconds, back to back, it read 12.3% against 14.0% without it, in line
 with its 26% fewer wakes. What remains while animating is roughly proportional to the number
-of wakes, which is why the schedule is the lever and the frame rate during motion is not
-lowered.
+of wakes, which is why the schedule is the lever, and why the frame budget below lowers the
+rate during motion rather than anything else.
+
+### Reduce Motion, Low Power Mode, thermal pressure and a frame budget
+
+None of the app's continuous animations asked what the Mac wanted (#377). `MotionBudget` answers
+that as a pure value from Reduce Motion and `EnergyConditions` (Low Power Mode and thermal
+state), tested in `MotionBudgetTests`:
+
+| | demonstration | working dots | dock frame cap |
+|---|---|---|---|
+| nothing asked | moves, 30 frames a second while the panel moves | walk | 60 a second |
+| Reduce Motion | still frame | still, fully lit | 60 a second |
+| Low Power Mode | still frame | walk | 20 a second, the meter's data rate |
+| serious or critical thermal state | still frame | walk | 20 a second |
+
+`WindowAttention` carries the budget, and `WindowVisibility.swift` re-evaluates it on
+`NSProcessInfoPowerStateDidChange`, `ProcessInfo.thermalStateDidChangeNotification` and
+`NSWorkspace.accessibilityDisplayOptionsDidChangeNotification` beside the window notices. The dock
+reads `MotionBudgetObserver.shared`, which re-reads on the same three notices.
+
+Counted headlessly by `ClipboardDemonstrationMomentsTests`, with the 39-character address line:
+
+| schedule | wakes per eight-second loop | while the panel rises | while it goes |
+|---|---|---|---|
+| every display frame, 120 Hz | 960 | 108 | 72 |
+| on change, motion at 120 Hz | 226 | 108 | 72 |
+| on change, motion at 30 Hz | 91 | 27 | 18 |
+| still, under any budget that stops it | 1 | 0 | 0 |
+
+Wakes fall by 60% against the schedule above, and the section above found the cost roughly
+proportional to wakes. **The processor figure for the 30 Hz cap has not been taken**: it needs
+the harness and the frame-count gate described above, and until somebody runs them the 11.3%
+row stands as the last measurement.
 
 ## What is paid before anybody speaks
 

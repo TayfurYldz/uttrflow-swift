@@ -1,6 +1,7 @@
 // Tests for when the home page's demonstration is allowed to move.
 
 import Testing
+import UttrflowCore
 
 @testable import Uttrflow
 
@@ -54,6 +55,30 @@ struct WindowAttentionTests {
     func stillOffHome() {
         var attention = inUse
         attention.isShown = false
+
+        #expect(!attention.animates)
+    }
+
+    @Test("stays still under Reduce Motion, even in the window being used")
+    func stillUnderReduceMotion() {
+        var attention = inUse
+        attention.motion = MotionBudget(reducesMotion: true)
+
+        #expect(!attention.animates)
+    }
+
+    @Test("stays still in Low Power Mode, even in the window being used")
+    func stillInLowPowerMode() {
+        var attention = inUse
+        attention.motion = MotionBudget(energy: EnergyConditions(isLowPowerMode: true))
+
+        #expect(!attention.animates)
+    }
+
+    @Test("stays still at serious thermal pressure, even in the window being used")
+    func stillWhenHot() {
+        var attention = inUse
+        attention.motion = MotionBudget(energy: EnergyConditions(thermal: .serious))
 
         #expect(!attention.animates)
     }

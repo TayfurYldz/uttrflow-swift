@@ -85,8 +85,8 @@ struct ClipboardDemonstrationPhase: Equatable {
 
 /// The instants at which the demonstration's drawing changes, so its clock does not wake on every display frame.
 struct ClipboardDemonstrationMoments: Sequence, IteratorProtocol {
-    /// How far apart instants are while the panel moves, at the fastest display's refresh rate.
-    static let frame: Double = 1.0 / 120
+    /// How far apart instants are while the panel moves: the demonstration's 30-a-second frame budget.
+    static let frame: Double = MotionBudget.demonstrationFrameInterval
 
     /// How far past a boundary an instant lands, so the state drawn is the one after it.
     static let nudge: Double = 0.001
