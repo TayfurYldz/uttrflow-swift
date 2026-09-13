@@ -73,17 +73,18 @@ module's object files, exactly one can open a connection:
 | Module | URLSession refs | In the app? |
 |---|---|---|
 | `Hub` (swift-transformers) | 13 | **yes** — the model downloader |
-| `HuggingFace` (swift-huggingface) | 37 | no — `uttrflow-bakeoff` only |
-| `EventSource` | 6 | no — pulled in by MLX, bake-off only |
-| `UttrflowLocalModel` | 3 | no — bake-off only |
+| `HuggingFace` (swift-huggingface) | 37 | **yes** — the suggestion model's downloader |
+| `EventSource` | 6 | yes — pulled in by MLX beside `HuggingFace` |
+| `UttrflowLocalModel` | 3 | yes — the suggestion model |
 | `WhisperKit`, `ArgmaxCore`, `Tokenizers`, `Jinja`, `Crypto`, `yyjson`, the seven Uttrflow modules, collections | 0 | yes |
 
 `swift-crypto` is linked but is pure computation — Hub uses it to hash downloaded files.
 `ArgmaxCore.ModelDownloader` wraps Hub and is never instantiated anywhere in this
 build: it is linked and unreachable.
 
-So every network call the shipping app is capable of making goes through `Hub`, and
-Hub is reached from exactly two places.
+So every model download the shipping app is capable of making goes through `Hub` for the
+speech model or `HuggingFace` for the suggestion model. Hub is reached from exactly two
+places; the suggestion model's path is in *The suggestion model* below.
 
 ### When Hub runs
 
@@ -279,6 +280,39 @@ still on disk and to `.notInstalled` when they are not, so the menu bar can say 
 ready…"*, *"Speech model didn't load"* or *"Setup hasn't finished"* instead of leaving
 the user with a false *"Ready"*. A missing model is still a setup state rather than a
 startup exception, but it is no longer silently discovered only after the first keypress.
+
+## The suggestion model
+
+`MLXCandidateScorer.prepare()` loads the suggestion model, and the app calls it whenever
+Suggestions is turned on or the weights are loaded again. It used to load through
+`loadModelContainer(from: #hubDownloader(), …)`. The hub client asks the model host for the
+repository's file list before it looks in the cache, and its cache-only fast path needs a
+metadata file the cache on disk did not have, so every load on an online Mac opened an IP
+connection even with every file already present. Offline the request failed and the load fell
+back to the cache, which is why nothing looked broken (#380).
+
+`LocalModel.weightsDirectory(cache:downloader:onProgress:)` now decides first. When
+`CachedSnapshot.complete` finds the snapshot `refs/main` names with `config.json`,
+`tokenizer.json` and `tokenizer_config.json` present, every `*.safetensors` file exactly as long
+as its own header says, every numbered shard present, and the weights at least nine tenths of
+the model's recorded download, the model loads from that directory and the hub is never
+constructed. Anything less goes to the hub exactly as before, so a first download still works.
+The shard index is not trusted as a list of files: one candidate's index names two shards
+while its repository holds one.
+
+A model already whole on disk is never refreshed from the hub; a new revision arrives only
+when the cache is missing or incomplete.
+
+`CachedSnapshotTests` pins it with a downloader that counts and refuses every call, and
+`offline_audit.sh` § Suggestion model fails if a load takes the hub downloader directly again.
+
+Measured with `uttrflow-bakeoff gpu-memory --passes 1` against a cache holding the whole
+gemma-3-4b-it-qat-4bit snapshot, under `kill-on-net.sb`:
+
+| build | exit |
+|---|---|
+| before | 137, killed before "loaded" |
+| after | 0 |
 
 ## What this does not prove
 

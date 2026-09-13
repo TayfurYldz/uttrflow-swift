@@ -36,21 +36,25 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing {
         self.init(model: model, maximumTokens: maximumTokens, bufferCache: .mlx)
     }
 
-    init(model: LocalModel, maximumTokens: Int, bufferCache: BufferCacheControl) {
+    init(
+        model: LocalModel, maximumTokens: Int, bufferCache: BufferCacheControl,
+        cache: URL = HubCache.default.cacheDirectory
+    ) {
         self.model = model
         self.maximumTokens = maximumTokens
         self.bufferCache = bufferCache
+        self.cache = cache
     }
 
-    /// Downloads and loads the weights, which a caller pays for deliberately rather than in a keystroke.
+    /// The Hugging Face cache a whole model is loaded from without asking the hub.
+    private let cache: URL
+
+    /// Loads the weights from disk when they are whole there, downloading them only when they are not.
     public func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         guard container == nil else { return }
-        container = try await loadModelContainer(
-            from: #hubDownloader(),
-            using: #huggingFaceTokenizerLoader(),
-            configuration: ModelConfiguration(id: model.identifier),
-            progressHandler: { onProgress($0.fractionCompleted) }
-        )
+        let directory = try await model.weightsDirectory(
+            cache: cache, downloader: { #hubDownloader() }, onProgress: onProgress)
+        container = try await loadModelContainer(from: directory, using: #huggingFaceTokenizerLoader())
         warm = await warmInstructions()
         vocabulary = await container?.perform { context in
             TokenHealing.Vocabulary(

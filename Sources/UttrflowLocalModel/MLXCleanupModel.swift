@@ -24,18 +24,16 @@ public actor MLXCleanupModel: CleanupModel {
         self.maximumTokens = maximumTokens
     }
 
-    /// Downloads and loads the weights, so the cost is paid deliberately and not inside a dictation.
+    /// Loads the weights from disk when whole there and downloads them otherwise, never inside a dictation.
     public func prepare(
         onProgress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws(TransformationError) {
         guard container == nil else { return }
         do {
-            container = try await loadModelContainer(
-                from: #hubDownloader(),
-                using: #huggingFaceTokenizerLoader(),
-                configuration: ModelConfiguration(id: model.identifier),
-                progressHandler: { onProgress($0.fractionCompleted) }
-            )
+            let directory = try await model.weightsDirectory(
+                cache: HubCache.default.cacheDirectory, downloader: { #hubDownloader() },
+                onProgress: onProgress)
+            container = try await loadModelContainer(from: directory, using: #huggingFaceTokenizerLoader())
         } catch {
             throw .transformFailed(kind: .localModel, description: error.localizedDescription)
         }
