@@ -560,7 +560,8 @@ struct DictationControllerLifetimeTests {
             await controller.stop()
         }
         // The task holds the stream, not the controller, so the drop is what has to be waited for.
-        for _ in 0..<200 where released != nil {
+        let ceiling = ContinuousClock.now + .seconds(30)
+        while released != nil, ContinuousClock.now < ceiling {
             try? await Task.sleep(for: .milliseconds(5))
         }
         #expect(released == nil, "the controller outlived every reference to it")

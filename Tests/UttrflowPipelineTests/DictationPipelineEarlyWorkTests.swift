@@ -123,7 +123,12 @@ private final class StageRendezvous: Sendable {
         var recognitionsInFlight = 0
         var recognitions = 0
         var besides = 0
+        /// Set once any wait runs out, so a serial pipeline pays the limit once rather than at every stage.
+        var gaveUp = false
     }
+
+    /// Long enough that only a pipeline that never overlaps the stages reaches it.
+    private static let limit = Duration.seconds(20)
 
     private let state = Mutex(State())
 
@@ -141,7 +146,7 @@ private final class StageRendezvous: Sendable {
             return state.besides
         }
         // Waits to be noticed rather than for a tidy to be in flight, which a prompt tidy is only briefly.
-        if waits { await until(within: .seconds(2)) { $0.besides > noticed } }
+        if waits { await until(within: Self.limit) { $0.besides > noticed } }
         let answer = await work()
         state.withLock { $0.recognitionsInFlight -= 1 }
         return answer
@@ -150,19 +155,22 @@ private final class StageRendezvous: Sendable {
     /// Holds a tidy open until a recognition is running beside it, which a serial pass can never provide.
     func tidy(waitsForARecognition waits: Bool) async {
         guard waits else { return }
-        if await until(within: .seconds(2), { $0.recognitionsInFlight > 0 }) {
+        if await until(within: Self.limit, { $0.recognitionsInFlight > 0 }) {
             state.withLock { $0.besides += 1 }
         }
     }
 
-    /// Polls until the condition holds, answering whether it ever did rather than how long it took.
+    /// Polls until the condition holds, answering whether it ever did; after one wait runs out, none waits again.
     @discardableResult
     private func until(within limit: Duration, _ holds: @Sendable (borrowing State) -> Bool) async -> Bool {
         let deadline = ContinuousClock.now + limit
         repeat {
-            if state.withLock({ holds($0) }) { return true }
+            let (held, gaveUp) = state.withLock { (holds($0), $0.gaveUp) }
+            if held { return true }
+            if gaveUp { return false }
             try? await Task.sleep(for: .milliseconds(2))
         } while ContinuousClock.now < deadline
+        state.withLock { $0.gaveUp = true }
         return false
     }
 }

@@ -142,7 +142,8 @@ private func makePipeline(
 
 /// Waits until `condition` holds, recording a failure rather than hanging when it never does.
 private func eventually(_ condition: () async -> Bool) async {
-    for _ in 0..<400 {
+    let ceiling = ContinuousClock.now + .seconds(30)
+    while ContinuousClock.now < ceiling {
         if await condition() { return }
         try? await Task.sleep(for: .milliseconds(5))
     }

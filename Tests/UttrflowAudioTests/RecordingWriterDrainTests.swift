@@ -22,6 +22,7 @@ struct RecordingWriterDrainTests {
         let url: URL
         private let reader: Int32
         private let read = DispatchSemaphore(value: 0)
+        private let gate = DispatchSemaphore(value: 0)
         private let started = Flag()
 
         init() throws {
@@ -38,15 +39,17 @@ struct RecordingWriterDrainTests {
             }
         }
 
-        /// Starts reading the pipe `delay` from now, on a thread of its own, and says when it began.
-        func readEverything(after delay: Duration) {
+        /// Reads the pipe on a thread of its own once the test lets go, or after `fallback` so a regression fails rather than hangs.
+        func readWhenLetGo(fallback: Duration = .seconds(30)) {
             let reader = self.reader
             let started = self.started
             let read = self.read
-            DispatchQueue.global().asyncAfter(deadline: .now() + delay.inSeconds) {
+            let gate = self.gate
+            DispatchQueue.global().async {
+                _ = gate.wait(timeout: .now() + fallback.inSeconds)
                 started.set()
                 var buffer = [UInt8](repeating: 0, count: 65_536)
-                let deadline = Date().addingTimeInterval(10)
+                let deadline = Date().addingTimeInterval(60)
                 while Date() < deadline {
                     let count = buffer.withUnsafeMutableBytes {
                         Darwin.read(reader, $0.baseAddress, $0.count)
@@ -57,6 +60,9 @@ struct RecordingWriterDrainTests {
                 read.signal()
             }
         }
+
+        /// Lets the reader start, which the test does only after it has looked.
+        func letGo() { gate.signal() }
 
         /// Whether the reader has begun, which is what a writer must not have waited for.
         var hasRead: Bool { started.isSet }
@@ -78,11 +84,12 @@ struct RecordingWriterDrainTests {
         let file = try StalledFile()
         let writer = try RecordingWriter(url: file.url)
         writer.append(block)
-        file.readEverything(after: .milliseconds(200))
+        file.readWhenLetGo()
 
         let recording = writer.finish()
 
         #expect(file.hasRead == false, "finish() waited for the disk before answering")
+        file.letGo()
         #expect(recording.duration == .seconds(200_000.0 / 16_000.0))
         await writer.drained()
         file.waitForReader()
@@ -93,11 +100,12 @@ struct RecordingWriterDrainTests {
         let file = try StalledFile()
         let writer = try RecordingWriter(url: file.url)
         writer.append(block)
-        file.readEverything(after: .milliseconds(200))
+        file.readWhenLetGo()
 
         writer.abandon()
 
         #expect(file.hasRead == false, "abandon() waited for the disk before returning")
+        file.letGo()
         await writer.drained()
         file.waitForReader()
         #expect(!FileManager.default.fileExists(atPath: file.url.path))

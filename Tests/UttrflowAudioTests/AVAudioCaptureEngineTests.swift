@@ -79,7 +79,7 @@ struct AVAudioCaptureEngineTests {
         source.emit(Array(repeating: 0.5, count: 64))
 
         source.die()
-        try await settle()
+        await settle(engine)
 
         await #expect(throws: AudioCaptureError.self) { _ = try await engine.stop() }
     }
@@ -95,7 +95,7 @@ struct AVAudioCaptureEngineTests {
         // Away, then back: samples resume into the same buffer with the missing span dropped.
         source.skip()
         source.emit(Array(repeating: 0.5, count: 64))
-        try await settle()
+        await settle(engine)
 
         await #expect(throws: AudioCaptureError.self) { _ = try await engine.stop() }
     }
@@ -106,7 +106,7 @@ struct AVAudioCaptureEngineTests {
         let engine = AVAudioCaptureEngine(source: source)
         try await engine.start()
         source.skip()
-        try await settle()
+        await settle(engine)
         // Asserted, not discarded: a gap that stopped being refused would pass this test silently.
         await #expect(throws: AudioCaptureError.self) { _ = try await engine.stop() }
 
@@ -123,7 +123,7 @@ struct AVAudioCaptureEngineTests {
         let engine = AVAudioCaptureEngine(source: source)
         try await engine.start()
         source.die()
-        try await settle()
+        await settle(engine)
         _ = try? await engine.stop()
 
         try await engine.start()
@@ -187,9 +187,13 @@ struct AVAudioCaptureEngineTests {
         return try await engine.stop()
     }
 
-    /// The report crosses onto the actor, so the test has to let that hop happen.
-    private func settle() async throws {
-        try await Task.sleep(for: .milliseconds(20))
+    /// Waits for the report to cross onto the actor, which it does on a task of its own.
+    private func settle(_ engine: AVAudioCaptureEngine, handling count: Int = 1) async {
+        let ceiling = ContinuousClock.now + .seconds(30)
+        while await engine.interruptionsHandled < count, ContinuousClock.now < ceiling {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(await engine.interruptionsHandled >= count, "the interruption never reached the engine")
     }
 
     @Test("refuses to stop what is not running")
