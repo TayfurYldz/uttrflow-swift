@@ -81,6 +81,18 @@ The same pass returns *where* the speech is, and only that span is transcribed, 
 200 ms margin either side so no onset is clipped. Segment timings are shifted back by
 the trimmed lead-in, so they still describe the recording the user made.
 
+The loudness a frame must reach to be kept is one expression, `VoiceActivity.threshold(forFloor:)`,
+and both readers of it — the trim here and the pause `SpeechWindowing` cuts a piece at — ask
+it rather than writing it out. It is three times the tenth-percentile frame, floored at the
+absolute floor and **capped at the speaking level**, and the cap is the half that was
+missing here: without it, a recording whose own quiet frames are loud — a piece of a long
+dictation is mostly speech, so its tenth percentile is not the room — set a bar above
+ordinary speech and trimmed real words off the head, where the piece before it had already
+ended. Nothing downstream could tell: the boundary falls at a pause, so what is left still
+reads as a whole sentence. A cap at the speaking level cannot do that, for the same reason
+the second test above is bounded by the first: anything at a speaking level is speech
+whatever the rest of the recording looks like.
+
 ## What it is worth
 
 Measured on a 13-second sentence with 2.5 s of lead-in and 3 s of tail — an ordinary
