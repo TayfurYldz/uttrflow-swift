@@ -265,7 +265,7 @@ final class SuggestionCoordinator {
         let read = front == ownBundleIdentifier ? nil : await FocusedFieldReader.read()
         guard turns.isCurrent(number) else { return }
         Self.log.debug(
-            "TURN front=\(front, privacy: .public) read=\(read != nil) line=\(read?.currentLine ?? "-", privacy: .public) value=\(read?.value != nil) chars=\(read?.value?.count ?? -1) sel=\(read?.selection?.location ?? -1) caret=\(read?.caret != nil) role=\(read?.role ?? "-", privacy: .public) field=\(read?.accessibilityDescription ?? read?.identifier ?? "-", privacy: .public) secure=\(read?.isSecure ?? false) placement=\(String(describing: read?.placement), privacy: .public)"
+            "TURN front=\(front, privacy: .public) read=\(read != nil) lineChars=\(read?.currentLine.count ?? -1) value=\(read?.value != nil) chars=\(read?.value?.count ?? -1) sel=\(read?.selection?.location ?? -1) caret=\(read?.caret != nil) role=\(read?.role ?? "-", privacy: .public) labelChars=\(read?.accessibilityDescription?.count ?? -1) identified=\(read?.identifier != nil) secure=\(read?.isSecure ?? false) placement=\(String(describing: read?.placement), privacy: .public)"
         )
         guard front != ownBundleIdentifier, let snapshot = read else {
             draw(session.turn(in: nil, at: PredictionContext(typed: "")).step)
@@ -312,7 +312,7 @@ final class SuggestionCoordinator {
             let ready = await generator?.isReady ?? false
             guard turns.isCurrent(number) else { return }
             Self.log.debug(
-                "QUERY typed=\(query.typed, privacy: .public) corpus=\(candidates.count) generatorReady=\(ready)"
+                "\(SuggestionLog.query(typed: query.typed, corpus: candidates.count, generatorReady: ready), privacy: .public)"
             )
             guard let update = await remembered(number, candidates, for: query, since: started),
                 turns.isCurrent(number)
@@ -327,7 +327,7 @@ final class SuggestionCoordinator {
             guard turns.isCurrent(number) else { return }
             switch options {
             case .none:
-                Self.log.debug("OPTIONS typed=\(query.typed, privacy: .public) none")
+                Self.log.debug("\(SuggestionLog.optionsNone(typed: query.typed), privacy: .public)")
                 lastEmpty = (query.surface, query.typed)
                 guard
                     let quiet = session.resolveGenerated(
@@ -335,7 +335,9 @@ final class SuggestionCoordinator {
                 else { return }
                 settle(quiet, in: snapshot, since: started)
             case .among(let values):
-                Self.log.debug("OPTIONS typed=\(query.typed, privacy: .public) among=\(values.count)")
+                Self.log.debug(
+                    "\(SuggestionLog.optionsAmong(typed: query.typed, among: values.count), privacy: .public)"
+                )
                 await generate(
                     number, with: generator, for: query, in: snapshot, choosing: values, since: started)
             case .open:
@@ -348,7 +350,7 @@ final class SuggestionCoordinator {
     private func settle(_ update: SuggestionUpdate, in snapshot: FocusedFieldSnapshot, since started: Date) {
         if let silence = update.silence {
             Self.log.debug(
-                "QUIET typed=\(snapshot.currentLine, privacy: .public) reason=\(silence.rawValue, privacy: .public) rejections=\(self.session.rejectionsHere) silencedHere=\(self.session.isSilencedHere) enabled=\(self.session.isEnabled)"
+                "\(SuggestionLog.quiet(typed: snapshot.currentLine, reason: silence.rawValue, rejections: self.session.rejectionsHere, silencedHere: self.session.isSilencedHere, enabled: self.session.isEnabled), privacy: .public)"
             )
             // A prose pause is answered the moment it is long enough, rather than at whatever tick comes next.
             if silence == .writingFluently {
@@ -418,8 +420,7 @@ final class SuggestionCoordinator {
                 // A failed pass is remembered like an empty one, so a tick never re-runs the failure, but it is never logged as one.
                 lastEmpty = (query.surface, query.typed)
                 Self.log.error(
-                    "GENERATE failed typed=\(query.typed, privacy: .public) error=\(String(describing: error), privacy: .public)"
-                )
+                    "\(SuggestionLog.generateFailed(typed: query.typed, error: error), privacy: .public)")
                 return
             case .success(let lines):
                 let standing = await attested(lines, for: query)
@@ -435,7 +436,7 @@ final class SuggestionCoordinator {
             }
         }
         Self.log.debug(
-            "GENERATE app=\(snapshot.applicationName, privacy: .public) typed=\(query.typed, privacy: .public) got=\(completions.count) elapsed=\(self.since(started))ms first=\(completions.first ?? "-", privacy: .public)"
+            "\(SuggestionLog.generate(application: snapshot.applicationName, typed: query.typed, got: completions.count, elapsedMilliseconds: self.since(started), firstCompletion: completions.first), privacy: .public)"
         )
         guard
             let update = session.resolveGenerated(
@@ -466,8 +467,7 @@ final class SuggestionCoordinator {
             // The one line stays on screen; only the list behind it is missing, and the log says why.
             if case .failure(let error) = followUp {
                 Self.log.error(
-                    "ALTERNATIVES failed typed=\(query.typed, privacy: .public) error=\(String(describing: error), privacy: .public)"
-                )
+                    "\(SuggestionLog.alternativesFailed(typed: query.typed, error: error), privacy: .public)")
             }
             return
         }
@@ -477,18 +477,17 @@ final class SuggestionCoordinator {
         else { return }
         lastGenerated = (query.surface, query.typed, [leader] + standing)
         Self.log.debug(
-            "ALTERNATIVES typed=\(query.typed, privacy: .public) got=\(others.count) elapsed=\(self.since(started))ms"
+            "\(SuggestionLog.alternatives(typed: query.typed, got: others.count, elapsedMilliseconds: self.since(started)), privacy: .public)"
         )
         await drawFresh(expanded, for: snapshot, turn: number)
     }
 
-    /// The model's lines the machine lets stand, with every line it denied named in the log; a program, path or branch this Mac does not have is never drawn.
+    /// The model's lines the machine lets stand, with how many it denied counted in the log; a program, path or branch this Mac does not have is never drawn.
     private func attested(_ lines: [String], for query: SuggestionQuery) async -> [String] {
         let standing = await verifier.standing(lines, after: query.typed, in: query.surface, now: Date())
         if standing.count < lines.count {
-            let dropped = lines.filter { !standing.contains($0) }
             Self.log.debug(
-                "ATTEST typed=\(query.typed, privacy: .public) in=\(lines.count) out=\(standing.count) dropped=\(dropped.joined(separator: " | "), privacy: .public)"
+                "\(SuggestionLog.attest(typed: query.typed, offered: lines.count, standing: standing.count), privacy: .public)"
             )
         }
         return standing
@@ -524,7 +523,7 @@ final class SuggestionCoordinator {
             request.candidates, in: request.surface, typed: request.typed, now: Date())
         guard turns.isCurrent(number) else { return nil }
         Self.log.debug(
-            "VERIFY typed=\(request.typed, privacy: .public) in=\(request.candidates.count) out=\(allowed.count) elapsed=\(self.since(started))ms first=\(allowed.first?.text ?? "-", privacy: .public)"
+            "\(SuggestionLog.verify(typed: request.typed, offered: request.candidates.count, allowed: allowed.count, elapsedMilliseconds: self.since(started), firstCompletion: allowed.first?.text), privacy: .public)"
         )
         // The gates answer within a moment, so the field read at the turn's start still stands for whatever is drawn.
         return session.resolve(allowed, for: request, now: Date(), elapsedMilliseconds: since(started))
@@ -670,13 +669,11 @@ final class SuggestionCoordinator {
             // What the gates left is a whole line, so taking it may replace characters as well as add.
             let method = try await acceptor.accept(.certain(text), after: typed)
             Self.log.debug(
-                "ACCEPT text=\(text, privacy: .public) typed=\(typed, privacy: .public) via=\(method?.rawValue ?? "nothing", privacy: .public)"
+                "\(SuggestionLog.accept(text: text, typed: typed, via: method?.rawValue ?? "nothing"), privacy: .public)"
             )
         } catch {
             // The case names which route refused and why; the user-facing message belongs to dictation, whose route has a clipboard.
-            Self.log.error(
-                "a completion landed nowhere: \(String(describing: error), privacy: .public) typed=\(typed, privacy: .public)"
-            )
+            Self.log.error("\(SuggestionLog.landedNowhere(error, typed: typed), privacy: .public)")
             return
         }
         guard let reading else { return }

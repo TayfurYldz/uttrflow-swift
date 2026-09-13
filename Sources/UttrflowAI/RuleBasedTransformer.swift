@@ -27,11 +27,20 @@ public struct RuleBasedTransformer: TextTransformationEngine {
         _ request: TransformationRequest
     ) async throws(TransformationError) -> TransformationResult {
         let formatter = DestinationFormatter.standard(for: request.situation.destination)
-        let pipeline =
-            pipeline ?? .standard(for: formatter, situation: request.situation, steps: steps)
+        let pipeline = pipeline ?? Self.pipeline(for: request, under: formatter, steps: steps)
         let draft = pipeline.run(Draft(transcription: request.transcription))
         return TransformationResult(
             text: draft.text, producedBy: kind,
             cleaning: CleaningRecord(draft: draft, ran: pipeline.ids))
+    }
+
+    /// The standard passes for the request's scope: a piece waits for the message to be finished.
+    private static func pipeline(
+        for request: TransformationRequest, under formatter: DestinationFormatter, steps: CleaningSteps
+    ) -> CleaningPipeline {
+        switch request.scope {
+        case .message: .standard(for: formatter, situation: request.situation, steps: steps)
+        case .piece: .piece(numbers: formatter.numbers, digits: formatter.digits, steps: steps)
+        }
     }
 }

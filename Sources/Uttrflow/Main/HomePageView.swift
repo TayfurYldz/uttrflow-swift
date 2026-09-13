@@ -12,6 +12,11 @@ struct HomePageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 OrbitStage(presentation: presentation, onIntent: onIntent)
+                if let notice = presentation.speechModel {
+                    HomeSpeechModelCard(notice: notice, onIntent: onIntent)
+                        .padding(.horizontal, MainMetrics.contentPadding)
+                        .padding(.vertical, 14)
+                }
                 if !presentation.figures.isEmpty {
                     figures
                     MainDivider()
@@ -138,5 +143,42 @@ struct HomeRowView: View {
         .background(isHovered ? Color.mainHover : .clear)
         .onHover { isHovered = $0 }
         .rowActions([row.open], onIntent: onIntent)
+    }
+}
+
+/// The speech model loading, or failed to: a spinner with no fraction, since nothing reports how far it has got.
+struct HomeSpeechModelCard: View {
+    let notice: HomeSpeechModelNotice
+    var onIntent: (MainIntent) -> Void
+
+    var body: some View {
+        MainCard {
+            HStack(alignment: .top, spacing: 13) {
+                Group {
+                    if notice.isLoading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Color.dockWarning)
+                    }
+                }
+                .frame(width: 22, height: 22)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(notice.title)
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(notice.message)
+                        .font(.system(size: MainMetrics.bodySize))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let action = notice.action {
+                    MainActionButton(action: action, isProminent: true, onIntent: onIntent)
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(notice.accessibilityLabel)
     }
 }

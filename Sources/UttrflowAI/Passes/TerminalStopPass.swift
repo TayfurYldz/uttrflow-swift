@@ -35,7 +35,7 @@ public struct TerminalStopPass: CleaningPass {
 
     /// The last word with a stop unless it ends a list item, or the layout keeps newlines and the text holds one.
     private func finishedLast(_ word: String, in draft: Draft) -> String {
-        if Self.lastSegmentIsListItem(draft) { return word }
+        if draft.endsInListItem { return word }
         if layout.contains(.preserveNewlines), draft.text.contains(where: \.isNewline) { return word }
         return WordShape.finished(word)
     }
@@ -67,12 +67,6 @@ public struct TerminalStopPass: CleaningPass {
                 paragraph = []
             }
         }
-    }
-
-    /// Whether the words after the last paragraph or list mark are a list item.
-    private static func lastSegmentIsListItem(_ draft: Draft) -> Bool {
-        let marks = draft.presentIndices.map { draft.words[$0] }.filter { $0.isLayoutMark }
-        return marks.last(where: { $0.text.hasPrefix("\n\n") || $0.isListMark })?.isListMark ?? false
     }
 
     /// How many sentences the text holds; the joiner asks the same question of a whole dictation.

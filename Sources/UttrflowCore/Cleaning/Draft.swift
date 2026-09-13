@@ -84,6 +84,12 @@ public struct Draft: Sendable, Equatable {
         }
     }
 
+    /// Whether the words after the last paragraph or list mark are a list item, which takes no full stop.
+    public var endsInListItem: Bool {
+        let marks = presentIndices.map { words[$0] }.filter(\.isLayoutMark)
+        return marks.last(where: { $0.text.hasPrefix("\n\n") || $0.isListMark })?.isListMark ?? false
+    }
+
     /// The dash and space a list item begins with, after the line break that starts it.
     public static let bullet = "- "
     /// What a numbered item begins with once its digits are past: "1. ", "2. ".

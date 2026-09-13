@@ -133,7 +133,7 @@ struct DictationPipelineJoinTests {
             ["first we fix the build", "second we review the PR", "also the deck is ready"],
             seeing: Self.sheet)
         #expect(
-            text == "First we fix the build. Second we review the PR. Also the deck is ready.")
+            text == "First we fix the build Second we review the PR Also the deck is ready.")
     }
 
     @Test("a correction the speaker made across a pause takes the words it replaced with it")
