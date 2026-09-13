@@ -382,6 +382,17 @@ reads audio off disk, so there is no capture to time, and it never types into an
 app. Capture in the real product is bounded by how long the speaker talks; insertion is
 a paste.
 
+**The microphone opening is the exception, and it is now timed in the product.** Pressing the
+shortcut builds the audio graph, queries the input format, installs a tap and starts the engine
+before a single sample exists — and the user is already speaking while that runs. It is charged to
+`microphoneOpen`, a stage of its own rather than part of `capture`, which times the ending of a
+recording. **No figure is recorded here yet**: taking one needs a Mac that can run
+`uttrflow-dev record` and compare the first sample's timestamp against key-down, and it should be
+written down here when somebody does. Whether the opening swallows a syllable or is imperceptible
+decides whether anything about the audio graph's lifetime is worth changing — and the obvious
+change, keeping an input graph alive between recordings, is a privacy question before it is a
+latency one.
+
 Dictionary correction and snippet expansion are not here either, for a different reason:
 this table predates them. Both are now timed in the product and appear on the Diagnostics
 page, and this harness will show them at the next run. Correction's cost is known from
