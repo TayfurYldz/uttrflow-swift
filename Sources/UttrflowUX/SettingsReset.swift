@@ -73,17 +73,21 @@ public struct SettingsPersonalisation: Sendable, Equatable {
 
     /// How many completions each application has taught, keyed by bundle identifier.
     public let suggestions: [String: Int]
+    /// Applications the completion loop has met but that have taught it nothing yet.
+    public let met: Set<String>
 
     /// Takes the counts as given, lower-casing bundle identifiers so a lookup cannot miss.
     public init(
         learnedWords: Int, addedWords: Int, transcripts: Int,
-        lastDictationApp: SettingsApp? = nil, suggestions: [String: Int] = [:]
+        lastDictationApp: SettingsApp? = nil, suggestions: [String: Int] = [:],
+        met: Set<String> = []
     ) {
         self.learnedWords = learnedWords
         self.addedWords = addedWords
         self.transcripts = transcripts
         self.lastDictationApp = lastDictationApp
         self.suggestions = suggestions.reduce(into: [:]) { $0[$1.key.lowercased()] = $1.value }
+        self.met = Set(met.map { $0.lowercased() })
     }
 
     /// How much one application has taught, which is what the button beside it will take.
@@ -91,21 +95,21 @@ public struct SettingsPersonalisation: Sendable, Equatable {
         suggestions[bundleIdentifier.lowercased()] ?? 0
     }
 
-    /// Every application that has taught the completions anything, so the list can name them.
+    /// Every application the Suggestions list should name: one that has taught something, or that the loop has met.
     public var applicationsWithSuggestions: Set<String> {
-        Set(suggestions.filter { $0.value > 0 }.keys)
+        Set(suggestions.filter { $0.value > 0 }.keys).union(met)
     }
 
     /// Counts a dictionary as it stands; a shipped word is neither learned nor the user's, so it is neither here.
     public init(
         entries: [DictionaryEntry], transcripts: Int, lastDictationApp: SettingsApp? = nil,
-        suggestions: [String: Int] = [:]
+        suggestions: [String: Int] = [:], met: Set<String> = []
     ) {
         self.init(
             learnedWords: entries.count(where: { $0.origin == .learned || $0.origin == .observed }),
             addedWords: entries.count(where: { $0.origin == .added }),
             transcripts: transcripts,
-            lastDictationApp: lastDictationApp, suggestions: suggestions)
+            lastDictationApp: lastDictationApp, suggestions: suggestions, met: met)
     }
 
     /// A fresh install, and what a window shows before it has asked.
@@ -154,18 +158,22 @@ public struct FilePersonalisationStore: SettingsPersonalisationStore {
     private let history: DictationHistoryStore
     private let clipboard: ClipboardStore
     private let suggestions: (any SuggestionCorpus)?
+    /// Applications the completion loop has met, asked for as a closure so this module needs no capture store.
+    private let met: @Sendable () -> Set<String>
 
     /// The corpus is optional: a build with tab-to-complete unwired has none to reach.
     public init(
         dictionary: PersonalDictionaryStore,
         history: DictationHistoryStore,
         clipboard: ClipboardStore,
-        suggestions: (any SuggestionCorpus)? = nil
+        suggestions: (any SuggestionCorpus)? = nil,
+        met: @escaping @Sendable () -> Set<String> = { [] }
     ) {
         self.dictionary = dictionary
         self.history = history
         self.clipboard = clipboard
         self.suggestions = suggestions
+        self.met = met
     }
 
     /// Counts the dictionary, the transcripts still inside the promise, and the completions.
@@ -176,7 +184,8 @@ public struct FilePersonalisationStore: SettingsPersonalisationStore {
             entries: dictionary.allEntries(),
             transcripts: kept.count,
             lastDictationApp: Self.lastApp(in: kept),
-            suggestions: suggestions?.learnedSuggestions() ?? [:])
+            suggestions: suggestions?.learnedSuggestions() ?? [:],
+            met: met())
     }
 
     /// The most recent dictation that named the app it went into, which is the app an override is about.

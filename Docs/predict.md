@@ -103,13 +103,18 @@ draws a completion and never a list, **Pause everywhere** stops for half an hour
 has switched off since, and everything the corpus has learned from — so a switch that is
 off can always be found and turned back on.
 
-The first time a value is committed in an application, Uttrflow asks once whether it may
-learn from that application, and remembers the answer in
-`~/Library/Application Support/Uttrflow/predict-consent.v1.json`. Until that question is
-answered nothing is recorded, so the corpus has nothing to offer in that application. The
-machine and the model still answer, so the first field is not necessarily silent — what it
-cannot do yet is remember. To see a remembered line: type something, press Return, answer
-the question, then type it again.
+Where suggestions may be offered is where typing may be learned from: one decision, made on
+the Suggestions screen. The answer is kept in
+`~/Library/Application Support/Uttrflow/predict-consent.v1.json`, written the first time the
+loop meets an application the screen already allows, and rewritten when a switch there moves.
+
+**Uttrflow used to ask in a modal instead**, the first time a value was committed in each
+application, bringing itself to the front over whatever the user was writing — and asking a
+question the Suggestions screen had already answered, since the turn cannot reach that point
+unless the application is switched on. An application the loop has met appears in the
+Applications list whether or not it has taught anything yet, so the switch is there to find;
+the promise the alert carried — kept on this Mac, in Uttrflow's own folder, never uploaded —
+is on the Suggestions pane beside it.
 
 `Uttrflow` in that path is the folder this build writes under, and a development build
 writes under its own — see [development-build.md](development-build.md).
