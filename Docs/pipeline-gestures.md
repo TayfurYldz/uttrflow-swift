@@ -57,6 +57,11 @@ instantly.
 A slip is cancelled only when it is neither half of a pair nor made while hands-free — see below,
 because the same 200 ms that decides a slip is what makes a tap countable.
 
+A binding made only of modifiers waits out the same 200 ms before a press opens anything, so
+another app's shortcut on those modifiers can arrive first and withdraw it. See
+`Docs/shortcuts.md`. A tap that ends inside that wait is still counted as a tap below; it just
+never opens the microphone to be cancelled.
+
 ## Two taps, and the microphone stays open
 
 Holding a key to talk is the right gesture for a sentence and the wrong one for a paragraph. So

@@ -63,6 +63,34 @@ had missed. It polled a source that cannot see Fn, read "up" while Fn was held, 
 the dictation the instant it started. It is gone: the tap delivers clean pairs, and the one
 release worth guaranteeing is the one below.
 
+## Modifiers bound alone begin other shortcuts
+
+A binding made only of modifiers, such as ⌃⌘⌥, is the start of every shortcut on those
+modifiers: ⌃⌘⌥K in another app holds exactly the chord before K arrives. The tap only listens,
+so that app still gets K; what this app must not do is dictate as well.
+
+`HotkeyRecogniser` withdraws such a press. A key typed while any modifier is held, or a modifier
+the binding does not have, marks the hold as used by another shortcut: a press already reported
+becomes `HotkeyEvent.cancelled` rather than `.released`, and nothing counts again until every
+modifier is up. So ⌃⌥⇧⌘K on a ⌃⌘⌥ binding reports one press and one withdrawal, not a press for
+each time ⇧ comes and goes. It applies only to holds of modifiers; Fn is read from its own flag
+and a combination such as ⌥Space or ⇧⌘V already names its key.
+
+A withdrawal alone would still open the microphone and play the start cue before K arrives, so
+`DictationController` also holds such a press back for `modifierSettle` — the same 200 ms as the
+minimum hold — before acting on it:
+
+- **Withdrawn inside the settle:** nothing happens at all. No microphone, no cue, no insertion.
+- **Held past the settle:** the press counts, measured from when the keys went down, so the
+  minimum hold and the double tap keep their meaning.
+- **Released inside the settle:** in hold-to-talk it is a tap, counted towards a double tap
+  without opening the microphone; in press-to-toggle it toggles on the release.
+- **Withdrawn after the settle:** the dictation that press opened is cancelled and nothing is
+  inserted. A press that closed a toggled dictation has already finished it and is not undone.
+
+The cost is that a modifier-only binding starts up to 200 ms later than it did. Bindings with a
+key, and Fn, start as they always have.
+
 ## The release nobody else will send
 
 `ActivationMonitor.stop()` yields a release when it is stopped mid-hold, because a hold
