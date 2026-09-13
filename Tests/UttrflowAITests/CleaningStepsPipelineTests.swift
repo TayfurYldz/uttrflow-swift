@@ -43,11 +43,16 @@ struct CleaningStepsPipelineTests {
     @Test("the passes handed to a model drop the same step and keep the finishing two out")
     func beforeModel() {
         let steps = CleaningSteps.default.setting(.numberForms, isOn: false)
-        let pipeline = CleaningPipeline.beforeModel(steps: steps)
+        let pipeline = CleaningPipeline.beforeModel(
+            for: .standard(for: .plain), situation: .unknown, steps: steps)
         #expect(!pipeline.ids.contains(.numberForms))
         #expect(!pipeline.ids.contains(.firstWord))
         #expect(!pipeline.ids.contains(.terminalStop))
-        #expect(CleaningPipeline.beforeModel(steps: .default).ids == CleaningPipeline.beforeModel.ids)
+        #expect(
+            CleaningPipeline.beforeModel(for: .standard(for: .plain), situation: .unknown).ids
+                == CleaningPipeline.beforeModel(
+                    for: .standard(for: .plain), situation: .unknown, steps: .default
+                ).ids)
     }
 
     @Test("the deterministic transformer reports what it did and what was off")

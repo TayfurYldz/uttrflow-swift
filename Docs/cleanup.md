@@ -215,7 +215,11 @@ one model call per piece — is `Docs/cleanup-design.md`. Below is where things 
   back a repeated "Text before the caret".
 - The generative transformer runs the same passes first, without the casing and the
   final full stop, and hands the model the draft's text — so the fillers and the
-  discarded half of a correction are gone before the model can rewrite around them.
+  discarded half of a correction are gone before the model can rewrite around them. Those
+  passes are built per request from the destination's own formatter, exactly as the rules
+  engine builds its own: until they were, the pre-model pipeline was a stored constant made
+  for plain text, so "one of them" dictated into a spreadsheet or a SQL editor reached the
+  model as words and whether the user saw "1" rested on the model alone.
 - `PromptBuilder` gives the model its instructions in three layers, each a separate
   piece of data. The **contract** (`PromptContract`, one string and ten worked examples)
   is the same everywhere: the goal, Tier 1 and the parts of Tier 2 marked ✅, the two

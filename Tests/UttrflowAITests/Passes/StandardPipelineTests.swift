@@ -16,7 +16,9 @@ struct StandardPipelineTests {
 
     @Test("leaves casing and the full stop for after the model")
     func beforeModel() {
-        #expect(CleaningPipeline.beforeModel.ids == Array(CleaningPipeline.standard.ids.dropLast(2)))
+        #expect(
+            CleaningPipeline.beforeModel(for: .standard(for: .plain), situation: .unknown).ids
+                == Array(CleaningPipeline.standard.ids.dropLast(2)))
     }
 
     @Test("is the plain formatter at a caret that says nothing")

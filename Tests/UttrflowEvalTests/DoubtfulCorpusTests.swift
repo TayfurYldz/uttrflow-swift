@@ -11,7 +11,8 @@ struct DoubtfulCorpusTests {
     private var doubtfulCases: [EvaluationCase] { EvaluationCorpus.all.filter { !$0.doubtful.isEmpty } }
 
     private func spans(for testCase: EvaluationCase) async -> [DoubtfulSpan] {
-        let draft = CleaningPipeline.beforeModel.run(Draft(transcription: testCase.transcription))
+        let draft = CleaningPipeline.beforeModel(for: .standard(for: .plain), situation: .unknown).run(
+            Draft(transcription: testCase.transcription))
         return await DoubtfulWords.standard.spans(in: draft, for: testCase.situation)
     }
 
