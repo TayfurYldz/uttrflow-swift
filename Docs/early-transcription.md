@@ -149,6 +149,18 @@ whole reason the early threshold is a sentence-length pause rather than any paus
 Snippets and the blank check run over the joined text, as before, so a trigger cannot
 be assembled across a piece boundary any more than across a sentence.
 
+The language is not re-decided at a boundary. Whisper detects a language per call, and a
+piece that is short, quiet or heavy with proper nouns can be detected as another one,
+which would decode the middle of a note as that language's phonetic guesswork. So the
+first piece that reports a language sets it for the dictation and every later piece is
+given it as a hint — one language per dictation, beside the one screen read and the one
+ranked vocabulary — and the next dictation detects afresh. Nothing is taken from
+`UserProfile.preferredLanguages`: it defaults to English for everyone and no setting
+changes it, so reading the hint from there would quietly end Hindi and Hinglish
+dictation. The cost, if the first piece is the one detected wrongly, is that the whole
+dictation is decoded in that language rather than one piece of it; the gain is that the
+pieces cannot disagree, and that N−1 detection passes are not run.
+
 ### What cancelling means
 
 Cancelling still leaves no trace: no piece is inserted, and a piece that finishes after
