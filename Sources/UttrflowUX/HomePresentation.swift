@@ -19,7 +19,7 @@ public struct HomePresentation: Sendable, Equatable {
     public let recentTitle: String
     /// Where the whole list lives, offered only when there is more than is shown.
     public let seeAll: MainAction?
-    /// The one thing worth doing next, when there is one; absent when nothing is outstanding.
+    /// What stops Uttrflow listening, when something does; absent otherwise.
     public let nextStep: MainEmptyState?
     /// The line under the greeting, in parts, so the shortcut can be drawn as keys.
     public let hint: HomeHint
@@ -305,9 +305,7 @@ public enum HomePresenter {
             recentTitle: title(for: listed, calendar: calendar, now: snapshot.now),
             seeAll: kept.count > listed.count
                 ? MainAction(title: "See all", intent: .show(.history)) : nil,
-            // "Try it now" is withheld while the model loads, since trying it now is what does not work.
-            nextStep: blocked
-                ?? (snapshot.speechModel == nil ? firstStep(kept: kept, shortcut: snapshot.shortcut) : nil),
+            nextStep: blocked,
             hint: hint(shortcut: snapshot.shortcut, settings: snapshot.settings),
             demonstration: blocked == nil ? demonstration(for: snapshot.settings) : nil,
             status: status(blocked: blocked != nil, speechModel: snapshot.speechModel),
@@ -466,20 +464,5 @@ public enum HomePresenter {
             application: HistoryPresenter.application(for: entry),
             // Copying is what people want from a glance; everything else is on the page this row leads to.
             open: MainAction(title: "Copy", symbolName: "doc.on.doc", intent: .copy(entry.text)))
-    }
-
-    // MARK: - What to do next
-
-    /// The one thing worth doing, offered only to somebody who has never dictated.
-    static func firstStep(kept: [HistoryEntry], shortcut: String) -> MainEmptyState? {
-        guard kept.isEmpty else { return nil }
-        return MainEmptyState(
-            symbolName: "mic",
-            title: "Try it now",
-            message: """
-                Hold \(shortcut) anywhere on your Mac and say something. Uttrflow types it \
-                where your cursor is — this window does not need to be open.
-                """,
-            footnote: "Nothing is uploaded. The words never leave this Mac.")
     }
 }

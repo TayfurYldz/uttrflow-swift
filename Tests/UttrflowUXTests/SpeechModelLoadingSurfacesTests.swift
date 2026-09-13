@@ -30,7 +30,7 @@ struct SpeechModelLoadingSurfacesTests {
                 == "Loading the speech model. Dictation starts working as soon as it’s ready.")
         #expect(!page.status.isReady)
         #expect(page.status.text == "Loading speech model")
-        #expect(page.nextStep == nil, "“Try it now” is exactly what does not work yet")
+        #expect(page.nextStep == nil, "the load card is the only card while nothing else blocks dictation")
     }
 
     @Test("the home page's card gains the minutes only once the load has run on")
@@ -48,7 +48,7 @@ struct SpeechModelLoadingSurfacesTests {
 
         #expect(page.speechModel == nil)
         #expect(page.status == HomeStatus(text: "Listening · ready", isReady: true))
-        #expect(page.nextStep?.title == "Try it now")
+        #expect(page.nextStep == nil)
     }
 
     @Test("a failed load shows a failed card with Try Again")
