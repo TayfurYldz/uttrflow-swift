@@ -84,7 +84,7 @@ public struct PromptBuilder: Sendable, Equatable {
         return spans.prefix(DoubtfulWords.maximumSpans)
             .map {
                 "\"\($0.heard)\" (heard at \(hundredths($0.confidence))) — could be: "
-                    + $0.candidates.joined(separator: ", ")
+                    + $0.candidates.map(\.spelling).joined(separator: ", ")
             }
             .joined(separator: "; ")
     }

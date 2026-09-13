@@ -8,11 +8,22 @@ import UttrflowDictionary
 struct DictionaryCandidatesTests {
     private let source = DictionaryCandidates(index: { CorrectionFixtures.index })
 
+    /// The one source that knows which entry a spelling came from, so the count a taken reading earns reaches it.
+    @Test("keeps the entry each spelling was taught by")
+    func keepsTheEntry() async throws {
+        let entry = try #require(CorrectionFixtures.entries.first { $0.word == "PaymentSheet" })
+
+        let found = await source.candidates(
+            for: Draft.Word("payment sheet", confidence: 0.3), in: .unknown)
+
+        #expect(found.first { $0.spelling == "PaymentSheet" }?.entryID == entry.id)
+    }
+
     @Test("offers the user's spelling for a run that sounds like it")
     func offersASpelling() async {
         let found = await source.candidates(
             for: Draft.Word("payment sheet", confidence: 0.3), in: .unknown)
-        #expect(found.contains("PaymentSheet"))
+        #expect(found.map(\.spelling).contains("PaymentSheet"))
     }
 
     @Test("offers nothing when the dictionary already spells the run exactly as it was heard")
@@ -31,8 +42,10 @@ struct DictionaryCandidatesTests {
     func sharesTheEngineLookup() async {
         let found = await source.candidates(for: Draft.Word("kestral", confidence: 0.3), in: .unknown)
         let engine = WordCorrectionEngine.spellings(of: "kestral", in: CorrectionFixtures.index)
-        #expect(found == Array(engine.map(\.word).prefix(DictionaryCandidates.maximumOffered)))
-        #expect(found.contains("Kestrel"))
+        #expect(
+            found.map(\.spelling)
+                == Array(engine.map(\.word).prefix(DictionaryCandidates.maximumOffered)))
+        #expect(found.map(\.spelling).contains("Kestrel"))
     }
 
     @Test("offers at most two, so the screen and the ordinary words keep their places on the line")

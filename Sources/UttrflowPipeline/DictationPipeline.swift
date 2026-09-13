@@ -519,6 +519,7 @@ public actor DictationPipeline {
 
         let changes = AppliedChanges(
             corrections: whole.corrected.corrections, snippets: expanded.snippets,
+            entriesTaken: whole.cleaned.entriesTaken,
             // The unrewritten sentence, which is the space the corrections' word ranges index.
             spokenWords: whole.heard.text.spokenWords.count)
         guard
@@ -733,9 +734,10 @@ public actor DictationPipeline {
     private func count(_ changes: AppliedChanges) async {
         guard !changes.isEmpty else { return }
 
-        // Once per entry and in one batch: the store counts dictations an entry was applied to, not words.
+        // Once per entry and in one batch: the store counts dictations an entry was applied to, not words, by either path.
         var counted: Set<UUID> = []
-        let entries = changes.corrections.map(\.entryID).filter { counted.insert($0).inserted }
+        let entries = (changes.corrections.map(\.entryID) + changes.entriesTaken)
+            .filter { counted.insert($0).inserted }
         if !entries.isEmpty { try? await learner.recordUse(ofEntries: entries) }
 
         guard !changes.snippets.isEmpty else { return }

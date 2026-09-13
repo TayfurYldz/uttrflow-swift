@@ -73,7 +73,7 @@ struct DoubtfulCorpusTests {
             }
             let found = await spans(for: testCase)
             #expect(found.map(\.heard) == [expected.0], "\(id)")
-            #expect(found.first?.candidates == [expected.1], "\(id)")
+            #expect(found.first?.candidates.map(\.spelling) == [expected.1], "\(id)")
         }
     }
 

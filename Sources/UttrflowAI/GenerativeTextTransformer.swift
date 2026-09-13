@@ -72,9 +72,12 @@ public struct GenerativeTextTransformer: TextTransformationEngine {
             throw .outputRejected(reason: reason)
         }
 
+        // Only a taught reading has an entry to count; the screen's and the vocabulary's have none.
+        let taken = meaningGuard.readingsTaken(draft: draft, rewritten: finished, offering: readings)
         return TransformationResult(
             text: finished, producedBy: kind,
-            cleaning: CleaningRecord(draft: draft, ran: pipeline.ids))
+            cleaning: CleaningRecord(draft: draft, ran: pipeline.ids),
+            entriesTaken: taken.compactMap(\.entryID))
     }
 
     /// The caret's echo the finishing pipeline took back, which the model did answer with and the guard must see.

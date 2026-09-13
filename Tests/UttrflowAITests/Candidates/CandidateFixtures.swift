@@ -10,8 +10,8 @@ struct ScriptedCandidates: CandidateSource {
         self.answers = answers
     }
 
-    func candidates(for word: Draft.Word, in situation: Situation) async -> [String] {
-        answers[word.text] ?? []
+    func candidates(for word: Draft.Word, in situation: Situation) async -> [Reading] {
+        (answers[word.text] ?? []).map { Reading($0) }
     }
 }
 
@@ -43,8 +43,8 @@ struct BarrierCandidates: CandidateSource {
     let line: StartLine
     let answer: String
 
-    func candidates(for word: Draft.Word, in situation: Situation) async -> [String] {
-        await line.waitForEverybody() ? [answer] : []
+    func candidates(for word: Draft.Word, in situation: Situation) async -> [Reading] {
+        await line.waitForEverybody() ? [Reading(answer)] : []
     }
 }
 

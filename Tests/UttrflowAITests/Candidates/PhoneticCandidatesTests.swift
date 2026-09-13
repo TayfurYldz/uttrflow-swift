@@ -19,8 +19,8 @@ struct PhoneticCandidatesTests {
         arguments: ["there", "their", "then", "one"])
     func offersNoFunctionWordHomophone(heard: String) async {
         let found = await source.candidates(for: Draft.Word(heard, confidence: 0.3), in: .unknown)
-        #expect(found.allSatisfy { !FunctionWords.holds($0) }, "\(heard) → \(found)")
-        #expect(!found.contains { ["there", "their", "than", "on"].contains($0) })
+        #expect(found.allSatisfy { !FunctionWords.holds($0.spelling) }, "\(heard) → \(found)")
+        #expect(!found.contains { ["there", "their", "than", "on"].contains($0.spelling) })
     }
 
     @Test("offers nothing for a word whose only rhymes open differently")

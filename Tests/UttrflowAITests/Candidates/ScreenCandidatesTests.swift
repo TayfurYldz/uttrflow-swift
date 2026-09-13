@@ -123,7 +123,7 @@ struct ScreenCandidatesTests {
         ]
 
         let together = await source.candidates(for: runs, in: situation)
-        var separately: [[String]] = []
+        var separately: [[Reading]] = []
         for run in runs { separately.append(await source.candidates(for: run, in: situation)) }
 
         #expect(together == separately)

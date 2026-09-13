@@ -62,18 +62,33 @@ struct RewriteAlignment: Sendable {
 
     /// What stands where a run of kept words stood: an untouched word itself, a changed run what replaced it.
     func standing(in keptRange: Range<Int>) -> String {
-        var written = ""
+        DoubtfulSpan.closedUp(rewrittenRun(in: keptRange))
+    }
+
+    /// The same words with their capitals and the spaces between them, which is what tells `PaymentSheet` from "payment sheet".
+    func standingAsWritten(in keptRange: Range<Int>) -> String {
+        Self.asWritten(rewrittenRun(in: keptRange))
+    }
+
+    /// Letters, digits and one space between words, so punctuation cannot hide a spelling and a space cannot be invented.
+    static func asWritten(_ text: String) -> String {
+        text.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ")
+    }
+
+    /// The words standing in a run's place, each as written and a space between them.
+    private func rewrittenRun(in keptRange: Range<Int>) -> String {
+        var written: [String] = []
         var index = keptRange.lowerBound
         while index < keptRange.upperBound {
             if let change = changes.first(where: { $0.kept.contains(index) }) {
-                written += rewritten[change.rewritten].map(\.text).joined()
+                written += rewritten[change.rewritten].map(\.text)
                 index = change.kept.upperBound
             } else {
-                written += kept[index].text
+                written.append(kept[index].text)
                 index += 1
             }
         }
-        return DoubtfulSpan.closedUp(written)
+        return written.joined(separator: " ")
     }
 
     // MARK: Aligning

@@ -13,12 +13,12 @@ public struct ScreenCandidates: CandidateSource {
     public init() {}
 
     /// The screen words that spell the run with its spaces closed up, then those that sound and open like it.
-    public func candidates(for word: Draft.Word, in situation: Situation) async -> [String] {
+    public func candidates(for word: Draft.Word, in situation: Situation) async -> [Reading] {
         await candidates(for: [word], in: situation).first ?? []
     }
 
     /// Every run against one reading of the screen, so a page of selected text is read and coded once a piece.
-    public func candidates(for words: [Draft.Word], in situation: Situation) async -> [[String]] {
+    public func candidates(for words: [Draft.Word], in situation: Situation) async -> [[Reading]] {
         let shown = Self.words(on: situation).map(ReadingKey.init)
         return words.map { word in
             let heard = ReadingKey(word.text)
@@ -31,7 +31,7 @@ public struct ScreenCandidates: CandidateSource {
                     sounded.append(screen.word)
                 }
             }
-            return Array((spelled + sounded).prefix(Self.maximumOffered))
+            return (spelled + sounded).prefix(Self.maximumOffered).map { Reading($0) }
         }
     }
 

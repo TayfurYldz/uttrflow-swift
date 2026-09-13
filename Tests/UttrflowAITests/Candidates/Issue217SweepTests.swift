@@ -26,7 +26,7 @@ struct Issue217SweepTests {
     func offersASpellingThatOpensDifferently(heard: String, taught: String) async {
         let source = DictionaryCandidates { Self.index([taught]) }
         let found = await source.candidates(for: Draft.Word(heard, confidence: 0.42), in: .unknown)
-        #expect(found == [taught])
+        #expect(found.map(\.spelling) == [taught])
     }
 
     /// The source and the correction engine must answer the same question, or a spelling is applied and never offered.
@@ -37,7 +37,9 @@ struct Issue217SweepTests {
         let found = await source.candidates(
             for: Draft.Word("cooper netties", confidence: 0.42), in: .unknown)
         let engine = WordCorrectionEngine.spellings(of: "cooper netties", in: dictionary)
-        #expect(found == Array(engine.map(\.word).prefix(DictionaryCandidates.maximumOffered)))
+        #expect(
+            found.map(\.spelling)
+                == Array(engine.map(\.word).prefix(DictionaryCandidates.maximumOffered)))
         #expect(!found.isEmpty)
     }
 

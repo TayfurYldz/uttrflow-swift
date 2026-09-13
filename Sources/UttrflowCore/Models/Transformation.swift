@@ -1,4 +1,5 @@
 // The request a transformer takes, the result it gives, and how it says whether it can take one.
+public import struct Foundation.UUID
 
 /// Everything a transformer needs to clean up one utterance.
 public struct TransformationRequest: Sendable, Equatable {
@@ -38,17 +39,24 @@ public struct TransformationResult: Sendable, Equatable {
     public let producedBy: TransformerKind
     /// What the deterministic steps did on the way, when the transformer keeps a record.
     public let cleaning: CleaningRecord?
+    /// The dictionary entries whose spelling the model wrote for a doubtful run, counted used like a correction's.
+    public let entriesTaken: [UUID]
 
     /// A result tagged with its producer and, where one was kept, the record of the steps.
-    public init(text: String, producedBy: TransformerKind, cleaning: CleaningRecord? = nil) {
+    public init(
+        text: String, producedBy: TransformerKind, cleaning: CleaningRecord? = nil,
+        entriesTaken: [UUID] = []
+    ) {
         self.text = text
         self.producedBy = producedBy
         self.cleaning = cleaning
+        self.entriesTaken = entriesTaken
     }
 
     /// The same result, carrying a record that says what was refused on the way to it.
     public func recording(_ cleaning: CleaningRecord?) -> TransformationResult {
-        TransformationResult(text: text, producedBy: producedBy, cleaning: cleaning)
+        TransformationResult(
+            text: text, producedBy: producedBy, cleaning: cleaning, entriesTaken: entriesTaken)
     }
 }
 

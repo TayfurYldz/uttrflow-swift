@@ -188,3 +188,21 @@ A dictation's uses go through the same path as one batch: `recordUse(of:)` given
 every entry in it that is still there and writes the file once, and writes nothing at all when
 none of them is. The counts are on disk before the call returns, so nothing is held in memory for
 a crash or a quit to lose; a write the disk refuses counts none of the batch.
+
+An entry is applied two ways, and both report into that batch. The correction engine writes a
+spelling itself and names its entry on the `DictationCorrection`; the doubtful-word line offers the
+spelling to the model, which may or may not write it. `DictionaryCandidates` keeps the entry on the
+`Reading` it offers, `MeaningPreservationGuard.readingsTaken` reads off the same alignment the
+verdict used which reading was written where the run stood, and the pipeline counts those entries
+beside the corrections' — once per dictation whichever path used an entry, or both. A reading that
+differs from the heard words only in its capitals is not counted: "Claude" for "claude" is what a
+sentence does to its first word whatever the dictionary holds, so the capital is no evidence the
+model chose the entry. Such an entry is still counted when the correction engine applies it. Before
+this, an entry that only ever reached the user through that line stayed at zero uses for its whole
+life.
+
+What that path does not yet do is let undo charge the entry. A taken reading is not a
+`DictationCorrection` — it has no word range in what was heard, because the model rewrote the
+sentence around it — so History has nothing to put back, and `timesReverted` only moves for
+corrections. An entry used only through the doubtful-word line therefore still cannot retire
+itself, and the recourse is the one above: delete the row, or restore and remove learnt words.
