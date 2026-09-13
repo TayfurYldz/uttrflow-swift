@@ -14,6 +14,8 @@ final class FakeClipboard: ClipboardSource, Sendable {
         var html: String?
         var picture: (data: Data, width: Int, height: Int)?
         var application: String?
+        var markers: PasteboardMarkers = []
+        var landsDuringMarkers: (text: String, markers: PasteboardMarkers)?
         var reads = 0
         var contentReads = 0
     }
@@ -23,7 +25,8 @@ final class FakeClipboard: ClipboardSource, Sendable {
     /// Writes to the clipboard as another application would: the contents change and the count goes up.
     func write(
         _ text: String?, html: String? = nil,
-        picture: (data: Data, width: Int, height: Int)? = nil, from application: String? = nil
+        picture: (data: Data, width: Int, height: Int)? = nil, from application: String? = nil,
+        marked markers: PasteboardMarkers = []
     ) {
         state.withLock {
             $0.count += 1
@@ -31,6 +34,7 @@ final class FakeClipboard: ClipboardSource, Sendable {
             $0.html = html
             $0.picture = picture
             $0.application = application
+            $0.markers = markers
         }
     }
 
@@ -52,6 +56,23 @@ final class FakeClipboard: ClipboardSource, Sendable {
     }
 
     func html() -> String? { state.withLock(\.html) }
+
+    /// Arms a write that lands while the watcher is reading the markers of the copy before it.
+    func writeWhileMarkersAreRead(_ text: String, marked markers: PasteboardMarkers = []) {
+        state.withLock { $0.landsDuringMarkers = (text, markers) }
+    }
+
+    func markers() -> PasteboardMarkers {
+        state.withLock {
+            if let landing = $0.landsDuringMarkers {
+                $0.landsDuringMarkers = nil
+                $0.count += 1
+                $0.text = landing.text
+                $0.markers = landing.markers
+            }
+            return $0.markers
+        }
+    }
 
     /// K4 — a picture the test put on the clipboard.
     func image() -> (data: Data, width: Int, height: Int)? { state.withLock(\.picture) }

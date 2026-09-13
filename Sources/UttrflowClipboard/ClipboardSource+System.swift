@@ -15,6 +15,10 @@ public struct SystemClipboardSource: ClipboardSource {
         NSPasteboard.general.string(forType: .string)
     }
 
+    public func markers() -> PasteboardMarkers {
+        PasteboardMarkers(types: NSPasteboard.general.types?.map(\.rawValue) ?? [])
+    }
+
     /// The formatted flavour, HTML only; RTF would need a conversion on a tick that must stay cheap.
     public func html() -> String? {
         NSPasteboard.general.string(forType: .html)

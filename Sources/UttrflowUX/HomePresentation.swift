@@ -322,7 +322,8 @@ public enum HomePresenter {
             title: "Everything you have copied, one shortcut away",
             explanation: """
                 Uttrflow remembers what you copy, so the thing you had two copies ago is \
-                still there. Passwords and card numbers are hidden until you ask for them.
+                still there. Card numbers, keys and passwords from a password manager \
+                stay hidden until you ask.
                 """,
             keys: SettingsShortcut.keycaps(for: shortcut),
             rows: [

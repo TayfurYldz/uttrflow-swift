@@ -10,6 +10,7 @@ public enum SecretShapes {
         if text.firstMatch(of: credentialledURL) != nil { return true }
         if text.firstMatch(of: vendorKey) != nil { return true }
         if hasNamedSecret(text) { return true }
+        if CardNumberShape.matches(text) { return true }
         return hasHighEntropyToken(text)
     }
 

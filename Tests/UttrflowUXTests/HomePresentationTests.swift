@@ -1,6 +1,7 @@
 // Tests for the home page: greeting, subtitle, recent rows, demonstration, status, and the corner.
 import Foundation
 import UttrflowAccount
+import UttrflowClipboard
 import UttrflowCore
 import UttrflowHistory
 import UttrflowSettings
@@ -189,6 +190,15 @@ struct HomeDemonstrationTests {
                 "Flat 402, Example Residences, Bengaluru",
             ])
         #expect(shown.rows.contains { $0.isMasked })
+    }
+
+    /// Only a password manager's marker hides a password, so the promise names password managers.
+    @Test("promises to hide only what the detector can recognise")
+    func promisesWhatIsDetected() throws {
+        let shown = try #require(HistoryFixture.home().demonstration)
+        #expect(shown.explanation.contains("passwords from a password manager"))
+        #expect(!shown.explanation.contains("Passwords and card numbers"))
+        #expect(ClipKindDetector.kind(of: "4111 1111 1111 1111") == .secret)
     }
 
     /// The only part anybody cares about is the words arriving in what they were already writing.
