@@ -84,6 +84,42 @@ public enum EvaluationCorpus {
             expected: "\"We ship on Friday.\"",
             mustKeep: ["Friday"]
         ),
+        // What PromptContract asks for and Docs/cleanup.md records the model refusing: measured, not asserted.
+        .init(
+            id: "restatement-slot-adjacent", category: .everyday,
+            spoken: "I wanted to buy a record as a gift as a present",
+            expected: "I wanted to buy a record as a present.",
+            mustKeep: ["record", "present"],
+            mustNotAdd: ["gift"]
+        ),
+        .init(
+            id: "restatement-slot-apart", category: .everyday,
+            spoken: "let's meet on tuesday on wednesday afternoon",
+            expected: "Let's meet on Wednesday afternoon.",
+            mustKeep: ["Wednesday", "afternoon"],
+            mustNotAdd: ["Tuesday"]
+        ),
+        // The same shape with a trigger phrase in it, which is the half the rules do attempt.
+        .init(
+            id: "restatement-with-trigger", category: .everyday,
+            spoken: "let's meet on tuesday no sorry on wednesday",
+            expected: "Let's meet on Wednesday.",
+            mustKeep: ["Wednesday"],
+            mustNotAdd: ["Tuesday"]
+        ),
+        // The controls: the same local shape said on purpose, which nothing may take a word out of.
+        .init(
+            id: "coordination-kept-not-restatement", category: .everyday,
+            spoken: "coffee with milk with sugar please",
+            expected: "Coffee with milk with sugar please.",
+            mustKeep: ["milk", "sugar"]
+        ),
+        .init(
+            id: "repeated-frame-for-kept", category: .everyday,
+            spoken: "I'll pay for lunch for everyone",
+            expected: "I'll pay for lunch for everyone.",
+            mustKeep: ["lunch", "everyone"]
+        ),
         .init(
             id: "no-punctuation", category: .everyday,
             spoken: "the build passed everything looks good ship it",
