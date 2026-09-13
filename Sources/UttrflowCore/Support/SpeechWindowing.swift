@@ -45,10 +45,7 @@ public struct SpeechWindowing: Sendable, Equatable {
         let loudness = Array(everything.prefix((limit - start) / frameLength))
         let sorted = loudness.sorted()
         let floor = VoiceActivity.percentile(sorted, 0.1)
-        // Louder than the room by a margin, but never so high that steady speech counts as quiet.
-        let threshold = Swift.max(
-            VoiceActivity.absoluteFloor,
-            Swift.min(floor * VoiceActivity.signalToNoise, VoiceActivity.assumedSpeechLevel))
+        let threshold = VoiceActivity.threshold(forFloor: floor)
 
         let earliest = Int(minimumLength / VoiceActivity.frameDuration)
         let comfortable = Int(comfortableLength / VoiceActivity.frameDuration)

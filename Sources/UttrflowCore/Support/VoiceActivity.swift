@@ -18,6 +18,11 @@ public enum VoiceActivity: Sendable {
     /// Audio kept either side of the speech, in seconds, so no onset is clipped.
     static let margin = 0.2
 
+    /// The loudness a frame must reach to be speech: above the room by a margin, and never above ordinary speech.
+    static func threshold(forFloor floor: Float) -> Float {
+        Swift.max(absoluteFloor, Swift.min(floor * signalToNoise, assumedSpeechLevel))
+    }
+
     /// The samples worth transcribing, or `nil` when the recording holds no speech.
     public static func speechRange(in samples: [Float], sampleRate: Int) -> Range<Int>? {
         let frameLength = max(1, Int(frameDuration * Double(sampleRate)))
@@ -32,7 +37,7 @@ public enum VoiceActivity: Sendable {
         guard ceiling >= absoluteFloor else { return nil }
         guard ceiling >= assumedSpeechLevel || ceiling >= floor * signalToNoise else { return nil }
 
-        let threshold = Swift.max(absoluteFloor, floor * signalToNoise)
+        let threshold = threshold(forFloor: floor)
         let minimumFrames = Swift.max(1, Int(minimumSpeech / frameDuration))
         guard let voiced = voicedFrames(in: loudness, above: threshold, lasting: minimumFrames)
         else {

@@ -109,6 +109,30 @@ struct VoiceActivityTests {
         #expect(range.upperBound > Signal.rate * 5)
     }
 
+    /// One expression, so the cap can never again be in one reader of it and not the other.
+    @Test("the loudness a frame must reach is floored at silence and capped at ordinary speech")
+    func thresholdIsFlooredAndCapped() {
+        #expect(VoiceActivity.threshold(forFloor: 0) == VoiceActivity.absoluteFloor)
+        #expect(VoiceActivity.threshold(forFloor: 0.004) == 0.004 * VoiceActivity.signalToNoise)
+        #expect(VoiceActivity.threshold(forFloor: 0.2) == VoiceActivity.assumedSpeechLevel)
+    }
+
+    /// A piece of a long dictation is mostly speech, so its own quiet frames are not the room it was spoken in.
+    @Test("keeps a quiet word at the head of a recording whose own quiet frames are loud")
+    func keepsAQuietWordOverALoudFloor() throws {
+        var audio = Signal.noise(6, level: 0.035)
+        for (offset, sample) in Signal.speech(0.4, level: 0.08).enumerated() {
+            audio[Signal.rate * 3 / 10 + offset] += sample
+        }
+        for (offset, sample) in Signal.speech(2, level: 0.3).enumerated() {
+            audio[Signal.rate * 2 + offset] += sample
+        }
+        let range = try #require(VoiceActivity.speechRange(in: audio, sampleRate: Signal.rate))
+
+        // Uncapped, three times this recording's tenth percentile sits above the quiet word and cuts it off.
+        #expect(range.lowerBound <= Signal.rate * 3 / 10)
+    }
+
     @Test("a single click is too short to be a word")
     func rejectsAClick() {
         var audio = Signal.silence(20)
