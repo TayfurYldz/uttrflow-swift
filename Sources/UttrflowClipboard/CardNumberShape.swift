@@ -9,11 +9,12 @@ enum CardNumberShape {
         }
     }
 
-    /// Thirteen to nineteen digits unbroken, or in the groups printed on cards with one separator throughout.
+    /// Digits unbroken, or in printed groups with one separator throughout; `issuers` rules on length.
     nonisolated(unsafe) private static let candidate =
         #/
         [0-9]{4}([\x20\-])[0-9]{4}\1[0-9]{4}\1[0-9]{4}(?:\1[0-9]{3})?   # 4-4-4-4 and 4-4-4-4-3
         | [0-9]{4}([\x20\-])[0-9]{6}\2[0-9]{4,5}                     # 4-6-5 and 4-6-4
+        | [0-9]{4}([\x20\-])[0-9]{3}\3[0-9]{3}\3[0-9]{3}              # 4-3-3-3
         | [0-9]{13,19}
         /#
 
@@ -37,8 +38,7 @@ enum CardNumberShape {
 
     /// Whether these digits are a length some network issues under its prefix, and pass Luhn.
     private static func isCardNumber(_ digits: String) -> Bool {
-        guard (13...19).contains(digits.count), issued(digits) else { return false }
-        return luhn(digits)
+        issued(digits) && luhn(digits)
     }
 
     /// Whether some network issues numbers of this length under this prefix.

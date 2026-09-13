@@ -52,6 +52,20 @@ struct PasteboardMarkersTests {
         #expect(await watcher.newClip(at: noon)?.clip.kind == .text)
     }
 
+    /// A password must never be paired with the markers of the ordinary copy that replaced it.
+    @Test("rereads a copy that changed while its markers were read")
+    func writeBetweenReads() async {
+        let clipboard = FakeClipboard()
+        let watcher = PasteboardWatcher(source: clipboard, now: { noon })
+        clipboard.write("Tr0ub4dor&3", from: "Passwords", marked: .concealed)
+        clipboard.writeWhileMarkersAreRead("hello")
+
+        #expect(await watcher.newClip(at: noon) == nil)
+        let next = await watcher.newClip(at: noon)?.clip
+        #expect(next?.text == "hello")
+        #expect(next?.kind == .text)
+    }
+
     @Test(
         "does not record a transient or generated copy",
         arguments: [

@@ -41,7 +41,7 @@ The cost, paid knowingly: long identifiers with a digit score between 3.7 and 4.
 ## Card numbers
 
 `CardNumberShape` accepts 13 to 19 digits, written unbroken or in the groups cards are printed
-in (4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4) with one separator, space or dash, used throughout. The
+in (4-4-4-4, 4-4-4-4-3, 4-6-5, 4-6-4, 4-3-3-3) with one separator, space or dash, used throughout. The
 digits must then carry a prefix some network issues under at that length (Visa, Mastercard,
 American Express, Diners Club, JCB, Discover, UnionPay, RuPay, Mir, Maestro) and pass the Luhn
 check.

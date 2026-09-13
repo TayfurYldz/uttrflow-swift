@@ -1,6 +1,6 @@
 // The nspasteboard.org markers a writer puts beside what it copies.
 
-/// What a copy's writer said about it, by the nspasteboard.org convention. See Docs/clipboard-secrets.md.
+/// What a copy's writer says about it, by the nspasteboard.org convention. See Docs/clipboard-secrets.md.
 public struct PasteboardMarkers: OptionSet, Sendable, Hashable {
     public let rawValue: Int
 

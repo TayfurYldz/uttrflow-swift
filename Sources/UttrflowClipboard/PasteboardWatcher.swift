@@ -103,6 +103,8 @@ public actor PasteboardWatcher {
         // A copy its writer marked as not for history is never recorded, text or picture.
         let markers = source.markers()
         guard markers.allowsRecording else { return nil }
+        // A write between the reads pairs one copy with another's markers; the next tick reads it whole.
+        guard source.changeCount() == count else { return nil }
 
         // K4 — a picture, asked first because the branch below returns for anything textless.
         if copied == nil, let picture = source.image() {
