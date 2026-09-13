@@ -777,7 +777,7 @@ and all of it is downloaded on first launch rather than shipped.
 
 The formatting sheet diffs the clip against the formatter's output once per presentation, on
 the main actor, and a kept clip may be 2 MB. `TextDiff` finds the fewest changed lines with a
-linear-space edit-distance search (layers of furthest-reaching points, as in the O(ND)
+linear-space edit-distance search (layers of furthest-reaching points, as in the O(n × d)
 algorithm), then walks from the top choosing at each change exactly what the full table did:
 equal lines first, and a removal before an addition whenever both are shortest. The walk
 needs the layers deepest first, so every 32nd layer is kept and each stretch of 32 is rebuilt
