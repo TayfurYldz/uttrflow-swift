@@ -105,6 +105,7 @@ struct TextDiffScalingTests {
         let large = Self.steps(
             from: Self.text(lines: 10_000), to: Self.text(lines: 10_000, indentingEvery: 2_500))
 
+        #expect(small > 0 && large > 0, "the tally must be connected")
         #expect(small <= 20 * 1_000, "1,000 lines took \(small) steps")
         #expect(large <= 20 * 10_000, "10,000 lines took \(large) steps")
     }
@@ -117,7 +118,9 @@ struct TextDiffScalingTests {
         let limit = TextDiff.changeLimit
 
         #expect(TextDiff.compare(from: before, to: after) == .tooLarge(before: lines, after: lines))
-        #expect(Self.steps(from: before, to: after) <= limit * limit + 4 * lines)
+        let steps = Self.steps(from: before, to: after)
+        #expect(steps > 0)
+        #expect(steps <= limit * limit + 4 * lines)
     }
 
     @Test("A pair past the line or byte limit is refused before any diff is taken")
@@ -175,6 +178,7 @@ struct TextDiffScalingTests {
 
         #expect(TextDiff.interesting(in: all).map(\.text) == ["a", "b", "d", "e", "f"])
         #expect(TextDiff.interesting(in: all, context: 0).map(\.text) == ["a", "e"])
+        #expect(TextDiff.interesting(in: all, context: -1).map(\.text) == ["a", "e"])
         #expect(TextDiff.interesting(in: []).isEmpty)
     }
 }

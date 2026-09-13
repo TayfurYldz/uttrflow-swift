@@ -777,11 +777,14 @@ and all of it is downloaded on first launch rather than shipped.
 
 The formatting sheet diffs the clip against the formatter's output once per presentation, on
 the main actor, and a kept clip may be 2 MB. `TextDiff` finds the fewest changed lines with a
-linear-space edit-distance search (layers of furthest-reaching points, as in the O(n × d)
-algorithm), then walks from the top choosing at each change exactly what the full table did:
-equal lines first, and a removal before an addition whenever both are shortest. The walk
-needs the layers deepest first, so every 32nd layer is kept and each stretch of 32 is rebuilt
-from it, which costs about one more pass and a few megabytes at the limit.
+edit-distance search over layers of furthest-reaching points, as in the O(n × d) algorithm,
+whose memory grows with the changes rather than with the product of the two texts' lengths. It
+then walks from the top choosing at each change exactly what the full table did: equal lines
+first, and a removal before an addition whenever both are shortest. The walk needs the layers
+deepest first, so every 32nd layer is kept and each stretch of 32 is rebuilt from it. That
+costs about one more pass, and the kept layers grow with the square of the changes, about
+d² / 64 integers: 2 MB at the 4,000-change limit. Every public entry point goes through that
+limit.
 
 `TextDiff.compare` refuses up front a text over 20,000 lines or 1 MB, and stops looking past
 4,000 changed lines; the sheet then states both line counts instead of a diff.

@@ -63,15 +63,15 @@ public enum TextDiff {
         return .lines(lines)
     }
 
-    /// A shortest diff, walked so an inserted line reads as one change and a removal comes before its addition.
-    public static func lines(from before: String, to after: String) -> [Line] {
+    /// A shortest diff with no limits, walked so an inserted line reads as one change and a removal comes before its addition.
+    static func lines(from before: String, to after: String) -> [Line] {
         let old = split(before)
         let new = split(after)
         return lines(from: old, to: new, changeLimit: old.count + new.count) ?? []
     }
 
     /// How many lines the change touches, which is the number a user decides on.
-    public static func changedLines(from before: String, to after: String) -> Int {
+    static func changedLines(from before: String, to after: String) -> Int {
         changedLines(in: lines(from: before, to: after))
     }
 
@@ -81,7 +81,7 @@ public enum TextDiff {
     }
 
     /// Only the changed parts with `context` lines each side; untouched runs make a narrow diff unreadable.
-    public static func interesting(
+    static func interesting(
         from before: String, to after: String, context: Int = 1
     )
         -> [Line]
@@ -91,9 +91,10 @@ public enum TextDiff {
 
     /// Only the changed lines of a diff with `context` lines each side, in order.
     public static func interesting(in all: [Line], context: Int = 1) -> [Line] {
+        let radius = max(0, context)
         var wanted = [Bool](repeating: false, count: all.count)
         for index in all.indices where all[index].kind != .same {
-            for nearby in max(0, index - context)...min(all.count - 1, index + context) {
+            for nearby in max(0, index - radius)...min(all.count - 1, index + radius) {
                 wanted[nearby] = true
             }
         }
@@ -143,7 +144,7 @@ private enum EditStep {
     case added(Int)
 }
 
-/// A shortest edit script in linear space, choosing at each change what a full table walked from the top would. See `Docs/performance.md`.
+/// A shortest edit script whose kept layers grow with the square of the changes, choosing at each change what a full table walked from the top would. See `Docs/performance.md`.
 private struct ShortestEdit {
     /// The old lines, numbered so equal lines share a number.
     let old: [Int]
