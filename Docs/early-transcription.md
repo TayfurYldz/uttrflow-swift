@@ -153,8 +153,20 @@ is kept. Nothing reaches the screen before the key is released.
 Apple's model pays for its instructions before it reads the utterance. Made at the
 start of the recording and pre-warmed, a session brought a ten-second utterance's
 tidying from 1.25 s to 0.92 s, so `TranscriptCleaning.warm()` is called as recording
-begins and `AppleFoundationCleanupModel` keeps that one session for the request that
-follows. It is still a fresh session per utterance: it is handed out once.
+begins.
+
+It is still a fresh session per utterance — one sentence's context must not bleed into the
+next — but no longer only one per *dictation*. `WarmSupply` hands its session out once and
+then makes another for the same instructions, so the second and third pieces cost what the
+first did. Warming once while the unit of work was the piece meant every piece after the
+first built its own session, and the piece that paid for it was the last one, which is the
+only one the user is waiting on.
+
+The replacement is made **after** the response returns, not beside it. This model serialises
+its work — four tidying sessions started at once took exactly as long as four in a row, as
+measured above — so prewarming during a rewrite would move the cost into the wait rather than
+out of it. The instructions come from the destination and are read once per dictation, so
+there is one key to make against and no extra model call: still one call per piece.
 
 ## Trimming the prompt does not pay
 
