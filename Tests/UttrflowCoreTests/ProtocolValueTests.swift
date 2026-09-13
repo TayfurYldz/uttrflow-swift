@@ -45,7 +45,7 @@ struct ProtocolValueTypeTests {
         // In the order the journey runs, which is the order every report draws them in.
         #expect(
             PipelineStage.allCases == [
-                .capture, .transcription, .correction, .transformation, .expansion, .insertion,
+                .capture, .drain, .transcription, .correction, .transformation, .expansion, .insertion,
             ])
         for stage in PipelineStage.allCases {
             let decoded = try JSONDecoder().decode(

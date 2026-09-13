@@ -61,8 +61,8 @@ struct DiagnosticsLatencyTests {
         #expect(page.latency?.stages.map(\.stage) == PipelineStage.allCases)
         #expect(
             page.latency?.stages.map(\.title) == [
-                "Recording", "Transcribing", "Checking the dictionary", "Tidying up",
-                "Expanding snippets", "Inserting",
+                "Recording", "Finishing the piece already under way", "Transcribing",
+                "Checking the dictionary", "Tidying up", "Expanding snippets", "Inserting",
             ])
         #expect(page.latency?.unmeasured.isEmpty == true)
     }
@@ -79,7 +79,8 @@ struct DiagnosticsLatencyTests {
         #expect(page.latency?.stages.last?.typical == "under 0.01s", "measured, and instant")
         #expect(
             page.latency?.unmeasured.map(\.title) == [
-                "Recording", "Tidying up", "Expanding snippets", "Inserting",
+                "Recording", "Finishing the piece already under way", "Tidying up",
+                "Expanding snippets", "Inserting",
             ])
         #expect(page.latency?.unmeasured.allSatisfy { $0.detail == "Never run" } == true)
         #expect(page.latency?.unmeasured.allSatisfy { $0.state == .unknown } == true)
@@ -94,7 +95,7 @@ struct DiagnosticsLatencyTests {
         ])
 
         #expect(page.latency?.headline == "at least 2.00s")
-        #expect(page.latency?.caption.hasSuffix("without 4 stages nothing has ever timed") == true)
+        #expect(page.latency?.caption.hasSuffix("without 5 stages nothing has ever timed") == true)
     }
 
     /// "at least" on a complete journey would be its own small lie.
@@ -102,7 +103,7 @@ struct DiagnosticsLatencyTests {
     func completeTotalIsPlain() {
         let page = DiagnosticsFixture.page(measurements: Self.wholeJourney)
 
-        #expect(page.latency?.headline == "6.00s")
+        #expect(page.latency?.headline == "7.00s")
         #expect(page.latency?.caption == "each stage's typical time, added together, over 1 dictation")
     }
 
@@ -136,11 +137,11 @@ struct DiagnosticsLatencyTests {
             DiagnosticsFixture.timing(.insertion, 0.04),
         ])
 
-        #expect(page.latency?.headline == "at least 2.62s", "three of the six stages are missing")
+        #expect(page.latency?.headline == "at least 2.62s", "four of the seven stages are missing")
         #expect(
             page.latency?.caption == """
                 each stage's typical time, added together, over 1 dictation, without \
-                3 stages nothing has ever timed
+                4 stages nothing has ever timed
                 """)
     }
 

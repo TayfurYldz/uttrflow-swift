@@ -25,6 +25,11 @@ public enum ReadingRestraint {
         GeneralVocabulary.knows(closedUp(reading)) && GeneralVocabulary.knows(closedUp(heard))
     }
 
+    /// Whether a sound key alone is offering one ordinary word for another, which is a collision rather than a reading.
+    public static func isOrdinaryCollision(_ reading: String, heard: String) -> Bool {
+        bothOrdinary(reading, heard: heard) && !Homophones.share(reading, heard)
+    }
+
     /// Whether a reading is worth offering: another spelling, sounding alike, opening alike, and not one ordinary word for another.
     public static func isWorthOffering(_ reading: String, for heard: String) -> Bool {
         isWorthOffering(ReadingKey(reading), for: ReadingKey(heard))

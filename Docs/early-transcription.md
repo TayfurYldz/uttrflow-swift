@@ -105,6 +105,13 @@ moment a piece can be ended it is recognised, put through the dictionary, and ti
 against the screen as it was when the piece was cut. Its timings are not recorded: the
 diagnostics page reports what the user waited for, and nobody waited for these.
 
+**The drain is the exception, and it is measured.** A piece still under way when the key comes
+up is finished rather than thrown away, and the user waits through that — it begins after they
+let go. It is charged to a stage of its own (`.drain`, "Finishing the piece already under way"),
+recorded only when there is something in flight, so a dictation too short to have worked ahead
+gains no row. What is still not charged to anyone is the work that finished before the key came
+up, which is the decision this paragraph records.
+
 When the key comes up, a piece under way is finished rather than thrown away, and the
 audio after the last cut is windowed the same way and processed in order — the final
 piece, usually, or every piece for a retried recording. Those timings are added up per
