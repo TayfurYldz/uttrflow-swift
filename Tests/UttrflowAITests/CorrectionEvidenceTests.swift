@@ -71,14 +71,14 @@ struct CorrectionEvidenceTests {
         #expect(sut.decisiveReason(preferring: "Uttrflow", over: "utter flow") == nil)
     }
 
-    @Test("the screen is read from the app, the document and the selection alike")
-    func everyPartOfTheScreenCounts() {
+    @Test("the screen is read from the document and the selection, never the app's own name")
+    func theDocumentAndSelectionCountButNotTheApp() {
         let context = AppContext(
             applicationName: "Grafana", documentName: "Terraform plan", selectedText: "asyncpg pool")
         let sut = CorrectionEvidence(
             utterance: CorrectionFixtures.spoken(""), seeing: context,
             certainAt: WordCorrectionEngine.certaintyThreshold)
-        #expect(sut.decisiveReason(preferring: "Grafana", over: "graf an a") == .seenOnScreen)
+        #expect(sut.decisiveReason(preferring: "Grafana", over: "graf an a") == nil)
         #expect(sut.decisiveReason(preferring: "Terraform", over: "terra form") == .seenOnScreen)
         #expect(sut.decisiveReason(preferring: "asyncpg", over: "a sink pee gee") == .seenOnScreen)
     }
