@@ -275,6 +275,11 @@ struct PromptTokensTests {
             let message = "line \(index)\nshared"
             try #expect(prompt.tokens(for: message, encode: encode) == render(message, with: tokenizer))
         }
+        // The first line was cached before the cache filled, so reading it again goes back to the tokenizer.
+        let before = prompt.tally.encodes
+        try #expect(
+            prompt.tokens(for: "line 0\nshared", encode: encode) == render("line 0\nshared", with: tokenizer))
+        #expect(prompt.tally.encodes > before)
     }
 
     @Test("A message is cut after each run of line breaks and nowhere else.")
