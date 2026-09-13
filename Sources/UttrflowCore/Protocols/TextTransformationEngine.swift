@@ -13,10 +13,16 @@ public protocol TextTransformationEngine: Sendable {
 
     /// Gets ready for a request going to `situation`, or to nowhere known, so the first one is not the slow one.
     func warm(for situation: Situation?) async
+
+    /// How long this engine may take before the router steps to the next one. See `Docs/stuck-recording.md`.
+    var budget: Duration { get }
 }
 
-/// The default warm-up: nothing.
+/// The defaults: nothing to warm, and a model's allowance.
 extension TextTransformationEngine {
+    /// What an engine that has not said otherwise may take, which is what a model engine needs.
+    public var budget: Duration { StageTimeout.engine }
+
     /// Nothing to prepare, which is what a rule-based engine has.
     public func warm(for situation: Situation?) async {}
 }

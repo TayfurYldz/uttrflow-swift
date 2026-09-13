@@ -387,6 +387,7 @@ public enum DiagnosticsPresenter {
         case .localModel: "Downloaded language model"
         case .rules: "Built-in rules"
         case .cloud: "Hosted language model"
+        case .untidied: "No clean-up ran"
         }
     }
 

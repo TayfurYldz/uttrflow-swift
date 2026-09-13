@@ -6,16 +6,26 @@ public struct TransformerRouter: TranscriptCleaning {
     private let engines: [any TextTransformationEngine]
     /// The kinds to try, in order.
     private let preference: [TransformerKind]
+    /// What each engine's allowance is measured against; injected so a test need not wait out a hang.
+    private let clock: any Clock<Duration>
 
     /// Keeps the engines and the kinds to try; the preference should end in one that never declines.
-    public init(engines: [any TextTransformationEngine], preference: [TransformerKind]) {
+    public init(
+        engines: [any TextTransformationEngine], preference: [TransformerKind],
+        clock: any Clock<Duration> = ContinuousClock()
+    ) {
         self.engines = engines
         self.preference = preference
+        self.clock = clock
     }
 
     /// Builds a router from a stored configuration, keeping only kinds this build has.
-    public init(engines: [any TextTransformationEngine], configuration: EngineConfiguration) {
-        self.init(engines: engines, preference: configuration.resolvedTransformerPreference)
+    public init(
+        engines: [any TextTransformationEngine], configuration: EngineConfiguration,
+        clock: any Clock<Duration> = ContinuousClock()
+    ) {
+        self.init(
+            engines: engines, preference: configuration.resolvedTransformerPreference, clock: clock)
     }
 
     /// The engines that will be tried, in order.
@@ -45,11 +55,19 @@ public struct TransformerRouter: TranscriptCleaning {
         _ request: TransformationRequest
     ) async throws(TransformationError) -> TransformationResult {
         let route = orderedEngines
-        let outcome = await FallbackRunner.firstSuccess(among: route) { engine in
+        let outcome = await FallbackRunner.firstSuccess(among: route) { [clock] engine in
             guard await engine.availability(for: request).isAvailable else {
                 throw TransformationError.noCapableTransformer
             }
-            return try await engine.transform(request)
+            // Its own allowance, so an engine that hangs spends nothing but its own turn.
+            let answer = try await withStageTimeout(engine.budget, clock: clock) {
+                try await engine.transform(request)
+            }
+            guard let answer else {
+                throw TransformationError.transformFailed(
+                    kind: engine.kind, description: "took longer than its \(engine.budget)")
+            }
+            return answer
         }
 
         switch outcome {

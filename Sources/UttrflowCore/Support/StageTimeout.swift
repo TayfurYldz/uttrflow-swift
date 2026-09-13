@@ -7,8 +7,14 @@ public enum StageTimeout: Sendable {
     /// Transcription, generous because a cold model load and four minutes of audio are both honest.
     public static let transcription = Duration.seconds(120)
 
-    /// Tidying, which is a language model reading one utterance.
+    /// The whole tidying stage, as a backstop; each engine on the route has its own allowance inside it.
     public static let transformation = Duration.seconds(30)
+
+    /// What one model engine may take before the router steps past it, leaving the floor room inside the stage.
+    public static let engine = Duration.seconds(20)
+
+    /// What the deterministic floor may take; it only rearranges words already in hand.
+    public static let rules = Duration.seconds(2)
 
     /// Context, correction, expansion and insertion: local, but each can block on another app.
     public static let quick = Duration.seconds(15)

@@ -193,9 +193,9 @@ struct DictationPipelineRecoveryTests {
         #expect(state.failure == nil)
     }
 
-    /// Crediting an engine that threw would flatter it in the evaluation record.
-    @Test("a transcript that could not be tidied is attributed to the rules, not the engine that failed")
-    func tidyingFailureIsAttributedToTheRules() async throws {
+    /// Crediting an engine that threw would flatter it in the record, and so would crediting one that never ran.
+    @Test("a transcript that could not be tidied is attributed to no engine at all")
+    func tidyingFailureIsAttributedToNoEngine() async throws {
         let pipeline = makePipeline(
             cleaner: RecoveryFakeCleaner(
                 outcome: .failure(.transformFailed(kind: .foundationModels, description: "model died")))
@@ -204,7 +204,8 @@ struct DictationPipelineRecoveryTests {
         let state = await dictate(pipeline)
 
         let outcome = try #require(state.insertedOutcome)
-        #expect(outcome.cleanedBy == .rules)
+        #expect(outcome.cleanedBy == .untidied)
+        #expect(outcome.cleanedBy != .foundationModels, "the engine that threw is not credited")
     }
 
     /// At insertion the words exist nowhere else, so the failure carries them out.
