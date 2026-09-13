@@ -22,6 +22,9 @@ public struct Settings: Sendable, Equatable, Codable {
     /// Whether the dictation shortcut is held down or pressed twice.
     public var hotkeyActivation: HotkeyActivation
 
+    /// Shortcuts that were a modifier held alone and are back to their defaults, until the user chooses again.
+    public var shortcutsReturnedToDefault: Set<ShortcutAction>
+
     /// The dictation shortcut, which is ``shortcuts`` seen from the one angle most screens want.
     public var hotkey: HotkeyBinding {
         get { shortcuts.first(for: .dictate) ?? .functionHold }
@@ -78,6 +81,7 @@ public struct Settings: Sendable, Equatable, Codable {
         destinations: DestinationOverrides = .none,
         shortcuts: ShortcutSet = .default,
         hotkeyActivation: HotkeyActivation = .holdToTalk,
+        shortcutsReturnedToDefault: Set<ShortcutAction> = [],
         showsFloatingButton: Bool = true,
         floatingButtonAnchor: DockAnchor = .bottomRight,
         shrinksToGripWhenIdle: Bool = true,
@@ -96,6 +100,7 @@ public struct Settings: Sendable, Equatable, Codable {
         self.destinations = destinations
         self.shortcuts = shortcuts
         self.hotkeyActivation = hotkeyActivation
+        self.shortcutsReturnedToDefault = shortcutsReturnedToDefault
         self.showsFloatingButton = showsFloatingButton
         self.floatingButtonAnchor = floatingButtonAnchor
         self.shrinksToGripWhenIdle = shrinksToGripWhenIdle
@@ -131,6 +136,7 @@ extension Settings {
         case destinations
         case shortcuts
         case hotkeyActivation
+        case shortcutsReturnedToDefault
         case showsFloatingButton
         case floatingButtonAnchor
         case shrinksToGripWhenIdle
@@ -160,6 +166,9 @@ extension Settings {
             hotkeyActivation: container.value(
                 forKey: .hotkeyActivation, default: fallback.hotkeyActivation
             ),
+            shortcutsReturnedToDefault: container.value(
+                forKey: .shortcutsReturnedToDefault, default: fallback.shortcutsReturnedToDefault
+            ).union(Settings.shortcutsReturned(from: decoder)),
             showsFloatingButton: container.value(
                 forKey: .showsFloatingButton, default: fallback.showsFloatingButton
             ),
@@ -206,6 +215,28 @@ extension Settings {
         binding.isDeliverable ? binding : .optionSpace
     }
 
+    /// The actions this file bound only to a modifier held alone, which reading it has just put back to their defaults.
+    static func shortcutsReturned(from decoder: any Decoder) -> Set<ShortcutAction> {
+        if let container = try? decoder.container(keyedBy: CodingKeys.self),
+            let stored = try? container.decodeIfPresent([String: [HotkeyBinding]].self, forKey: .shortcuts)
+        {
+            var bound: [ShortcutAction: [HotkeyBinding]] = [:]
+            for (name, bindings) in stored {
+                if let action = ShortcutAction(rawValue: name) { bound[action] = bindings }
+            }
+            return ShortcutSet.boundOnlyToBareModifiers(in: bound)
+        }
+        guard let legacy = try? decoder.container(keyedBy: LegacyShortcutKeys.self) else { return [] }
+        let fields: [(LegacyShortcutKeys, ShortcutAction)] = [
+            (.hotkey, .dictate), (.clipboardHotkey, .clipboard),
+        ]
+        return Set(
+            fields.filter { key, _ in
+                legacy.optionalValue(forKey: key, default: nil as HotkeyBinding?)?.isBareModifier == true
+            }
+            .map(\.1))
+    }
+
     /// The shortcuts on disk, reading the two fields that came before them when they are all there is.
     static func shortcuts(from decoder: any Decoder, default fallback: ShortcutSet) -> ShortcutSet {
         if let container = try? decoder.container(keyedBy: CodingKeys.self),
@@ -229,7 +260,8 @@ extension Settings {
         // A clipboard shortcut that is the dictation one would fire both, so it is dropped.
         if let clipboard, clipboard.isDeliverable, clipboard != dictation {
             migrated.replace(at: 0, with: clipboard, for: .clipboard)
-        } else {
+        } else if clipboard?.isBareModifier != true || fallback.first(for: .clipboard) == dictation {
+            // A modifier held alone was a choice this build refuses, so it keeps the default instead of nothing.
             migrated.remove(at: 0, from: .clipboard)
         }
         return migrated

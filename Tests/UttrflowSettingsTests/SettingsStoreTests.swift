@@ -369,6 +369,47 @@ struct SettingsTests {
         #expect(settings.shortcuts.first(for: .dictate) == .optionSpace)
     }
 
+    /// Issue 342: a held ⌘ started dictation on ⌘C, so this build puts it back rather than honouring it.
+    @Test("returns a shortcut stored as a modifier held alone to its default, and says which it returned")
+    func returnsABareModifierToTheDefault() throws {
+        let settings = try decode(
+            #"{"shortcuts": {"dictate": [{"keyCode": 55, "modifiers": ["command"]}], "clipboard": [{"keyCode": 9, "modifiers": ["control"]}]}}"#
+        )
+
+        #expect(settings.shortcuts.first(for: .dictate) == .optionSpace)
+        #expect(settings.shortcuts.first(for: .clipboard) == HotkeyBinding(keyCode: 9, modifiers: [.control]))
+        #expect(settings.shortcutsReturnedToDefault == [.dictate])
+    }
+
+    @Test("returns the fields shortcuts replaced to their defaults when either was a modifier held alone")
+    func returnsALegacyBareModifierToTheDefault() throws {
+        let settings = try decode(
+            #"{"hotkey": {"keyCode": 61, "modifiers": []}, "clipboardHotkey": {"keyCode": 58, "modifiers": ["option"]}}"#
+        )
+
+        #expect(settings.shortcuts.first(for: .dictate) == .optionSpace)
+        #expect(settings.shortcuts.first(for: .clipboard) == .shiftCommandV)
+        #expect(settings.shortcutsReturnedToDefault == [.dictate, .clipboard])
+    }
+
+    /// Written back and read again, the note must outlast the file it was found in until the user chooses.
+    @Test("keeps the note that a shortcut was returned through a round trip")
+    func theNoteSurvivesARoundTrip() throws {
+        let read = try decode(#"{"shortcuts": {"dictate": [{"keyCode": 58, "modifiers": []}]}}"#)
+        let restored = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(read))
+
+        #expect(restored.shortcutsReturnedToDefault == [.dictate])
+        #expect(restored.shortcuts.first(for: .dictate) == .optionSpace)
+    }
+
+    @Test("returns nothing, and notes nothing, for shortcuts the user could press")
+    func notesNothingForUsableShortcuts() throws {
+        #expect(try decode("{}").shortcutsReturnedToDefault.isEmpty)
+        #expect(
+            try decode(#"{"shortcuts": {"dictate": [{"keyCode": 63, "modifiers": []}]}}"#)
+                .shortcutsReturnedToDefault.isEmpty)
+    }
+
     @Test("keeps every way into an action through a round trip")
     func severalWaysSurvive() throws {
         var written = Settings.default
