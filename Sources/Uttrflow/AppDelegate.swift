@@ -12,6 +12,7 @@ import UttrflowInput
 import UttrflowPermissions
 import UttrflowPipeline
 import UttrflowPredict
+import UttrflowPredictCapture
 import UttrflowPredictStore
 import UttrflowSettings
 import UttrflowSpeech
@@ -160,7 +161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private lazy var settingsWindow = SettingsWindowController(
         store: settingsStore,
         personalisation: FilePersonalisationStore(
-            dictionary: dictionary, history: history, clipboard: clipboard),
+            dictionary: dictionary, history: history, clipboard: clipboard,
+            met: { AppDelegate.applicationsTheLoopHasMet() }),
         onChange: { [weak self] settings in self?.settingsChanged(to: settings) },
         // Through the same switch the main window uses, so one choice is never applied two ways.
         onRequest: { [weak self] change in self?.apply(change) },
@@ -203,6 +205,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     /// Writes the words this build ships knowing, which happens once and never blocks the launch.
     private func seedTheDictionary() {
         Task { [dictionary] in try? await dictionary.seedShippedWords(at: Date()) }
+    }
+
+    /// Applications the completion loop has met, so the Suggestions list can offer a switch for each.
+    nonisolated static func applicationsTheLoopHasMet() -> Set<String> {
+        let file = CapturePreferencesFile(
+            path: CapturePreferencesFile.defaultFile(in: .applicationSupportDirectory)
+                .path(percentEncoded: false))
+        return Set(file.load().consent.keys)
     }
 
     /// Loads the recogniser, saying so until it can dictate. See `Docs/startup.md`.
