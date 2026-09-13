@@ -304,8 +304,7 @@ struct DictationPipelineRecoveryTests {
         _ = await dictate(pipeline)
 
         let measurements = await recorder.measurements
-        // Capture is draining and converting the buffer; the hold itself is `spokenFor`, not a stage.
-        // No piece is ever in flight in this take, so the drain is not a wait this dictation had.
+        // Capture drains the buffer, the hold is `spokenFor`, and no piece is in flight here to wait for.
         #expect(
             measurements.map(\.stage) == [
                 .capture, .transcription, .correction, .transformation, .expansion, .insertion,
