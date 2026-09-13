@@ -60,6 +60,8 @@ public actor DictationPipeline {
     private var earlySpans: [Span] = []
     private var earlyCut = 0
     private var earlyWork: Task<Void, Never>?
+    /// Whether a piece is being recognised right now, which is what makes the drain a wait worth timing.
+    private var pieceInFlight = false
     private var earlyContext: AppContext?
     /// Ranked once per dictation, against the screen it began on, and given to every piece.
     private var dictationWords: [String]?
@@ -342,7 +344,9 @@ public actor DictationPipeline {
             }
             guard generation == mine, !wasCancelled(mine) else { return }
             if let heard {
+                pieceInFlight = true
                 let piece = await finish(heard, seeing: seeing, recording: NoOpMetricsRecorder())
+                pieceInFlight = false
                 guard generation == mine, !wasCancelled(mine) else { return }
                 earlySpans.append(.done(piece))
             }
@@ -403,11 +407,16 @@ public actor DictationPipeline {
 
         // A piece under way is finished, not thrown away: its words are needed either way.
         earlyWork?.cancel()
-        // Measured, because the user waits through it: it begins after they let the key go.
         if let earlyWork {
-            await metrics.measuring(.drain, clock: clock) { await earlyWork.value }
+            // Measured only where a piece really is in flight, so working ahead of nothing gains no row.
+            if pieceInFlight {
+                await metrics.measuring(.drain, clock: clock) { await earlyWork.value }
+            } else {
+                await earlyWork.value
+            }
         }
         earlyWork = nil
+        pieceInFlight = false
         var spans = earlySpans
         var cut = earlyCut
         let earlyContext = self.earlyContext
