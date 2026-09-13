@@ -15,6 +15,7 @@ struct RulesCorpusTests {
         "filler-between-commas",
         "repeated-phrase", "i-mean-correction", "actually-between-numbers", "false-no-stays",
         "coordinated-list-kept", "repeated-frame-kept", "emphatic-double-kept",
+        "coordination-kept-not-restatement", "repeated-frame-for-kept",
         "doubled-place-name-kept", "coordinated-apology-kept", "spoken-comma",
         "comma-as-a-word", "quotation-opening-the-text", "new-paragraph", "time-of-day",
         "percentage", "money",
