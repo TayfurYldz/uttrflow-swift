@@ -229,7 +229,11 @@ enum PhoneticIndexFixture {
 extension Array {
     /// The single element, or nil otherwise; `first` would pass a test that produced three corrections.
     fileprivate var only: Element? { count == 1 ? first : nil }
+}
 
+/// Which runs of several words an entry may take, which the evidence margin does not answer.
+@Suite("A run of several words")
+struct MultiWordCorrectionTests {
     // MARK: - A run of several words
 
     /// Measured on this corpus: two signals clear the margin, and at length nothing else stopped them.
