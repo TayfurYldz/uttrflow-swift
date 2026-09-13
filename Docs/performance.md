@@ -844,6 +844,27 @@ four `.mlmodelc` bundles and it pays that every time a recogniser is constructed
 recogniser must be constructed **once** and kept. It already is — `BackedSpeechEngine`
 loads once and guards it.
 
+## Reading a terminal line for its prompt
+
+`ShellPrompt.input` runs on the main actor each suggestion turn in a terminal, so its cost is
+bounded rather than left to the length of the line. It reads the line once, carrying forward
+what each terminator needs to know about the text before it, and looks for a prompt only in
+the first `ShellPrompt.searchLimit` (4,096) characters, since a prompt is short and a pasted
+line need not be. A terminator past that point is not taken for a prompt.
+
+Release build, a line of `ab# ` repeated, best of 20 runs (one run at 100 KB and over), on a
+machine at load average 100 to 275, so the old column is inflated and its growth is not:
+
+| line | before | after |
+|---|---|---|
+| 1 KB | 0.32 ms | 0.05 ms |
+| 10 KB | 27 ms | 0.20 ms |
+| 100 KB | 15.3 s | 0.37 ms |
+| 1 MB | not run (quadratic, extrapolated at about 25 minutes) | 0.36 ms |
+
+`ShellPromptScalingTests` counts characters read through `ShellPrompt.tally` rather than
+timing: the previous reading took 2,004,000 reads for a 4,000-character line.
+
 ## Disk
 
 ```
