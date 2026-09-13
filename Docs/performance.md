@@ -423,6 +423,27 @@ with its 26% fewer wakes. What remains while animating is roughly proportional t
 of wakes, which is why the schedule is the lever and the frame rate during motion is not
 lowered.
 
+### The clipboard poll
+
+macOS offers no notification for a copy, so `PasteboardWatcher` reads the change count on a
+timer, from login, for as long as the app runs. That makes it the largest steady wakeup source in
+an idle Uttrflow, and its cost is wakeups rather than processor time. A stand-alone loop doing
+exactly this, its own wakeups read with `proc_pid_rusage` over 30 s:
+
+| cadence | wakeups a second | processor |
+|---|---|---|
+| 200 ms, no tolerance (before) | 4.8 | ≈ 0.04% of a core |
+| 500 ms, 100 ms tolerance (now) | 1.7 | ≈ 0.02% |
+| 1 s, 200 ms tolerance | 1.0 | ≈ 0.01% |
+
+The poll was 200 ms because ⌘C followed by the panel shortcut is a single hand movement. That race
+is now closed where it happens: `toggleQuickPanel` calls `PasteboardWatcher.catchUp` before it reads
+the clips, so a copy made a moment before is always in the panel whatever the cadence. The poll
+therefore runs at 500 ms, with a fifth of that as tolerance, at utility priority.
+
+What this gives up: the clipboard holds only its latest contents, so two copies inside one
+interval keep only the second. That window grew from 200 ms to 500 ms.
+
 ## What is paid before anybody speaks
 
 `AppDelegate` calls `pipeline.prepare()` at launch, which loads the speech model. So every
