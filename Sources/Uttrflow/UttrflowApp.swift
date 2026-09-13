@@ -1,9 +1,11 @@
 // The entry point.
 
 import AppKit
+import Foundation
 import UttrflowCore
 import UttrflowLocalModel
 import UttrflowPipeline
+import UttrflowPredict
 
 /// The app, owning nothing but the objects it wires together.
 @main
@@ -11,7 +13,9 @@ enum UttrflowApp {
     static func main() {
         let application = NSApplication.shared
         // One model both validates a remembered suggestion and invents one where there is none; its weights are fetched when the feature is first built, never at launch.
-        let model = MLXCandidateScorer(model: .gemma3)
+        let model = IdleReleasingModel(
+            model: MLXCandidateScorer(model: .gemma3),
+            idleAfter: IdleRelease.window(physicalMemory: ProcessInfo.processInfo.physicalMemory))
         let delegate = AppDelegate(
             scoring: model, generating: model,
             prepareModel: { onProgress in try await model.prepare(onProgress: onProgress) },
