@@ -20,7 +20,7 @@ struct ShellPromptScalingTests {
     func readsEachCharacterOnce() {
         for length in [100, 1_000, 4_000] {
             let read = Self.charactersRead(Self.terminators(length))
-            #expect(read <= length, "\(length) characters took \(read) reads")
+            #expect(read == length, "\(length) characters took \(read) reads")
         }
     }
 
@@ -28,7 +28,7 @@ struct ShellPromptScalingTests {
     func longLinesCostTheLimit() {
         let limit = ShellPrompt.searchLimit
         for length in [10_000, 100_000, 1_000_000] {
-            #expect(Self.charactersRead(Self.terminators(length)) <= limit)
+            #expect(Self.charactersRead(Self.terminators(length)) == limit)
         }
     }
 
