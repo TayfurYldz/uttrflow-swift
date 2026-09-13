@@ -1,6 +1,7 @@
 // The WhisperKit recogniser, and the decoding rules a conditioning prompt would otherwise cost it.
 public import Foundation
 public import UttrflowCore
+import OSLog
 import WhisperKit
 
 /// The real WhisperKit recogniser, kept thin; excluded from coverage. See Docs/speech-engines.md.
@@ -19,8 +20,12 @@ public actor WhisperKitBackend: TranscriptionBackend {
 
     public nonisolated var minimumDuration: Duration { Self.shortestClip }
 
+    /// Where the load's own measurements go; `Docs/startup.md` is the only record of what this costs.
+    private static let log = Logger(subsystem: "com.uttrflow.Uttrflow", category: "speech")
+
     public func load() async throws(SpeechEngineError) {
         guard kit == nil else { return }
+        let started = ContinuousClock.now
         // A missing tokenizer is "not installed", or WhisperKit visits Hugging Face instead of failing.
         guard FileManager.default.fileExists(atPath: modelFolder.path),
             TokenizerAssets.arePresent(in: modelFolder)
@@ -47,6 +52,25 @@ public actor WhisperKitBackend: TranscriptionBackend {
         } catch {
             throw .modelLoadFailed(description: error.localizedDescription)
         }
+        report(started.duration(to: ContinuousClock.now))
+    }
+
+    /// Says where the load's seconds went, since WhisperKit measures the parts and nothing reads them.
+    private func report(_ elapsed: Duration) {
+        guard let timings = kit?.timings else {
+            Self.log.info("speech model loaded in \(elapsed.inSeconds, format: .fixed(precision: 2))s")
+            return
+        }
+        Self.log.info(
+            """
+            speech model loaded in \(elapsed.inSeconds, format: .fixed(precision: 2))s: \
+            prewarm \(timings.prewarmLoadTime, format: .fixed(precision: 2))s, \
+            specialise encoder \(timings.encoderSpecializationTime, format: .fixed(precision: 2))s \
+            decoder \(timings.decoderSpecializationTime, format: .fixed(precision: 2))s, \
+            load encoder \(timings.encoderLoadTime, format: .fixed(precision: 2))s \
+            decoder \(timings.decoderLoadTime, format: .fixed(precision: 2))s, \
+            tokenizer \(timings.tokenizerLoadTime, format: .fixed(precision: 2))s
+            """)
     }
 
     public func transcribe(
@@ -126,6 +150,9 @@ private final class LoadedKit: @unchecked Sendable {
     init(_ kit: WhisperKit) {
         self.kit = kit
     }
+
+    /// What the load cost, as WhisperKit measured it while doing it.
+    var timings: TranscriptionTimings { kit.currentTimings }
 
     func transcribe(
         _ samples: [Float], languageHint: LanguageCode?, biasedTowards vocabulary: [String]
