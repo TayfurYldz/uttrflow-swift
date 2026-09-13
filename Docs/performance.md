@@ -247,6 +247,19 @@ instructions and the vocabulary and empties MLX's cache. Measured with
 MLX holds no active memory after the release; the 190 MB left is the process with MLX and Metal initialised and has not been broken down further. Turning the
 feature back on loads the weights again from disk in about 3 s.
 
+### Under memory pressure
+
+`MemoryPressureSource` watches the kernel's pressure events. At a warning or a critical
+reading `AppDelegate` releases the suggestion model the same way, and the Suggestions screen
+says it is paused to free memory rather than going quiet. Once pressure is back to normal the
+model waits for the calm to last before it loads again — two minutes the first time — and
+`SuggestionModelPressure` doubles that wait, up to thirty minutes, each time a reload is
+followed by pressure within thirty minutes. Without the wait, the 3 s reload of 2.5 GB is
+exactly what pushes a small Mac straight back into pressure, and the model would load and
+drop in a loop. A reload that holds for thirty minutes starts the wait over.
+
+The speech model is left alone under pressure, for the reasons above.
+
 ## Processor
 
 Memory answers "will it fit". This is the other half — what it costs to run — and a table

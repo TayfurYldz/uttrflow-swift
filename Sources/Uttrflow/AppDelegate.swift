@@ -94,6 +94,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var modelAsk = 0
     /// The latest fetch of those weights, internal so a test can wait for it rather than for the clock.
     private(set) var modelPreparation: Task<Void, Never>?
+    /// When the suggestion model gives memory back and takes it again; internal so a test can shorten the waits.
+    var memoryPressure = SuggestionModelPressure()
+    /// The reload waiting for memory to stay calm, cancelled by the next reading; internal so a test can wait for it.
+    private(set) var pressureReload: Task<Void, Never>?
+    private let pressureSource = MemoryPressureSource()
     /// Which clean-up engines answered that they could run; internal so a test can read it back.
     private(set) var transformerAvailability: [TransformerKind: Bool] = [:]
 
@@ -206,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         startWatchingForTheShortcut()
         startWatchingTheClipboard()
         startCompletingWhatIsTyped()
+        pressureSource.start { [weak self] in self?.memoryPressureChanged(to: $0) }
         loadSpeechModel()
         probeTransformers()
         refreshAccount()
@@ -368,6 +374,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         stateTask?.cancel()
         dismissalTask?.cancel()
         completions?.stop()
+        pressureSource.stop()
     }
 
     /// Builds tab-to-complete, or leaves it unbuilt, which is what everybody who has not asked for it gets.
@@ -433,6 +440,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
     }
 
+    /// Releases the suggestion model when memory is pressed, and loads it again once calm has lasted. See `Docs/performance.md`.
+    func memoryPressureChanged(to level: MemoryPressureLevel) {
+        pressureReload?.cancel()
+        pressureReload = nil
+        switch level {
+        case .warning, .critical:
+            guard settings.suggestions.isEnabled, isModelPreparing else { return }
+            memoryPressure.released(at: .now)
+            releaseTheModel()
+            suggestionModel = .releasedForMemory
+        case .normal:
+            guard memoryPressure.isReleased else { return }
+            let wait = memoryPressure.wait
+            pressureReload = Task { [weak self] in
+                try? await Task.sleep(for: wait)
+                guard !Task.isCancelled, let self, memoryPressure.isReleased,
+                    settings.suggestions.isEnabled
+                else { return }
+                memoryPressure.reloaded(at: .now)
+                prepareTheModelIfNeeded()
+            }
+        }
+    }
+
     /// Moves the reading on, and to loading once every byte is down and only the reading-in is left.
     private func suggestionModelProgressed(_ fraction: Double) {
         guard case .downloading = suggestionModel else { return }
@@ -444,6 +475,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard settings.suggestions.isEnabled else {
             completions?.stop()
             completions = nil
+            memoryPressure.forget()
+            pressureReload?.cancel()
             releaseTheModel()
             return
         }

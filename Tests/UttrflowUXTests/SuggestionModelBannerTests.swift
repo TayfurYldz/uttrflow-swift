@@ -52,6 +52,14 @@ struct SuggestionModelBannerTests {
         #expect(try #require(bannerFor(.downloading(fractionCompleted: 0.075))).title.contains("8%"))
     }
 
+    @Test("a model set aside for memory says so, and says it comes back by itself")
+    func releasedForMemorySaysSo() throws {
+        let shown = try #require(bannerFor(.releasedForMemory))
+        #expect(shown.title == "Paused to free memory")
+        #expect(shown.message.contains("come back on their own"))
+        #expect(bannerFor(.releasedForMemory, suggesting: false) == nil)
+    }
+
     @Test("loading is its own state, since it happens on every launch and no bytes move")
     func loadingSaysSo() throws {
         let shown = try #require(bannerFor(.loading))

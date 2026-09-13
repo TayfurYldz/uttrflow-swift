@@ -76,6 +76,8 @@ public enum SuggestionModelReadiness: Sendable, Equatable {
     case loading
     /// Loaded, so a completion can be judged.
     case ready
+    /// Set aside while this Mac is short of memory, and loaded again once memory has stayed free for a while.
+    case releasedForMemory
     /// It could not be fetched or read; carries what to tell the user, never the raw error.
     case failed
 }
