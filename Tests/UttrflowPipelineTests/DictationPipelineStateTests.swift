@@ -219,6 +219,22 @@ struct DictationPipelineStateTests {
         #expect(await capture.calls.events == [.start])
     }
 
+    /// The user is already speaking while this runs, so Diagnostics has to be able to say how long it took.
+    @Test("charges the microphone opening to a stage of its own")
+    func measuresTheOpening() async {
+        let metrics = RecordingMetricsRecorder()
+        let pipeline = DictationPipeline(
+            capture: FakeAudioCaptureEngine(), speech: FakeSpeechEngine(),
+            cleaner: FakeCleaner(), context: FakeContextEngine(context: .fixture()),
+            inserter: FakeInserter(), metrics: metrics, clock: ManualClock())
+
+        await pipeline.startRecording()
+
+        #expect(await metrics.measurements.contains { $0.stage == .microphoneOpen })
+        // The recording has not ended, so the stage that measures its ending has nothing yet.
+        #expect(await metrics.measurements.contains { $0.stage == .capture } == false)
+    }
+
     @Test("ignores a second start while it is already recording")
     func startWhileRecordingIsIgnored() async {
         let capture = FakeAudioCaptureEngine()
