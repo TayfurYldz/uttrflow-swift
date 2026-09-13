@@ -359,6 +359,12 @@ struct SnippetStoreTests {
 
         #expect(try await store.save(snippet) == [snippet])
         #expect(sandbox.onDisk() == [snippet])
+        // The unreadable bytes are set aside beside it, never written over.
+        let folder = sandbox.file.deletingLastPathComponent()
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        let aside = try #require(
+            names.first { $0.hasPrefix(sandbox.file.lastPathComponent + ".unreadable-") })
+        #expect(try Data(contentsOf: folder.appending(path: aside)) == Data("not json at all".utf8))
     }
 
     @Test("a file written by an older build is read whole or not at all")

@@ -4,7 +4,6 @@ public import struct Foundation.UUID
 
 public import struct Foundation.Data
 public import class Foundation.FileManager
-public import class Foundation.JSONDecoder
 public import class Foundation.JSONEncoder
 
 /// Everything the user has dictated, in its own file on this Mac. See `Docs/history-store-file.md`.
@@ -117,12 +116,9 @@ public actor DictationHistoryStore {
 
     // MARK: - The file
 
-    /// Reads the file, answering with nothing when there is nothing readable there.
+    /// Reads the file, setting an unreadable one aside so the next write cannot replace the only copy.
     private func load() -> [DictationRecord] {
-        guard let data = try? Data(contentsOf: file),
-            let records = try? JSONDecoder().decode([DictationRecord].self, from: data)
-        else { return [] }
-        return records
+        LocalStore.read([DictationRecord].self, from: file).value ?? []
     }
 
     /// Writes the whole list atomically, or removes the file when nothing is left to keep.

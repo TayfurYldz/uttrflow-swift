@@ -217,12 +217,9 @@ public actor PersonalDictionaryStore {
 
     // MARK: - The file
 
-    /// Reads the file, answering with nothing when there is nothing readable there.
+    /// Reads the file, setting an unreadable one aside so the next write cannot replace the only copy.
     private func load() -> [DictionaryEntry] {
-        guard let data = try? Data(contentsOf: file),
-            let entries = try? JSONDecoder().decode([DictionaryEntry].self, from: data)
-        else { return [] }
-        return entries
+        LocalStore.read([DictionaryEntry].self, from: file).value ?? []
     }
 
     /// Writes the whole list atomically, or removes the file when nothing is left to keep.

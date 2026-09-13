@@ -35,7 +35,8 @@ it only on success would be one more state to be wrong about.
 Reads answer with nothing when there is nothing readable there. Absent, unreadable, truncated,
 hand-edited, or written by a build that knew a different shape all mean the same thing to a user,
 which is that the app should still open: a dictionary that has forgotten everything makes dictation
-slightly worse, and one that refuses to load makes it impossible.
+slightly worse, and one that refuses to load makes it impossible. The unreadable file is renamed
+aside first, as the history store describes, so the next word added cannot write over the only copy.
 
 ## Sightings are never written down
 

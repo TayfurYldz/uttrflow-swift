@@ -36,6 +36,13 @@ permanent on the next ordinary ⌘C. Measured before the split: one damaged byte
 The saved file's path is derived from the history's rather than injected, so the pair travels
 together: move or copy the folder and the clipboard arrives whole.
 
+An unreadable file is renamed aside — `saved.v1.json.unreadable-<seconds since 1970>` — before
+anything else happens, so the next write starts a fresh file instead of replacing the only copy.
+A file that cannot be moved aside either is left where it is, and every write to it is refused.
+`LocalStore.read(_:from:)` does this for every JSON store in the app, and tells a missing file
+apart from one that is there and cannot be read: permission denied, truncated, empty, or a shape
+from a newer build.
+
 Answering an unreadable file with an empty list is itself why the two are separate. It is the
 right answer for a history nobody promised to keep and the wrong one for a clip somebody named,
 and one file cannot give two answers. Salvaging clip by clip is not attempted: our own writes are
@@ -156,13 +163,15 @@ point that check was written. It cannot handle what is already there: a build th
 leaked them permanently, because no future write drops a name that was already absent from the
 list. `sweepOnce(against:)` reconciles the folder once per launch to cover that.
 
-It is skipped when the list is empty, and that is the whole safety of it. Reading answers with
-nothing for a file that is missing, truncated or written by another build — so an empty list is
-not evidence that the user has no pictures, and sweeping on one would delete every picture they
-have over a bad read.
+A picture is an orphan only when every file that can name one was read. So the sweep is skipped
+when either file was unreadable at this launch, and on every later launch while a set-aside file
+sits beside it. Checking for an empty list alone was not enough: with only the saved file damaged
+the history still held clips, the list was not empty, and the first read deleted the picture of
+every pinned, aliased and filed clip. Skipping leaks at worst; sweeping on a bad read destroys.
+Once the set-aside file is restored or removed, the next launch sweeps again.
 
-The sweep in `save(_:)` runs only when a file stops being referenced, so an ordinary text copy —
-which is nearly every write — never pays for a directory scan. Earlier the sweep documented itself
+`save(_:)` deletes exactly the files that stopped being referenced by that write, never runs a
+directory scan, and so cannot reach a picture that belongs to a file it failed to read. Earlier the sweep documented itself
 as running after the retention pass and was in fact called from nowhere, so every picture whose
 clip was deleted or aged out stayed on disk for ever; four had accumulated in a morning's testing.
 
