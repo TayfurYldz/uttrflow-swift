@@ -89,8 +89,6 @@ final class SuggestionCoordinator {
     /// True while an accepted completion is being inserted, so the keys it posts wake no further turn.
     private var isInserting = false
     private var again: SuggestionReason?
-    /// Applications already asked about this launch, so a declined question is not repeated.
-    private var asked: Set<String> = []
     private let ownBundleIdentifier = Bundle.main.bundleIdentifier
     /// Called when the user turns the feature off everywhere, so the choice is persisted and can be undone.
     var onTurnedOffEverywhere: (() -> Void)?
@@ -125,7 +123,17 @@ final class SuggestionCoordinator {
 
     /// Takes what the user has just chosen, so a change on the Suggestions screen holds from the next keystroke.
     func follow(_ preferences: SuggestionPreferences) {
+        let before = self.preferences
         self.preferences = preferences
+        // One switch, two stores: what may be suggested in is what may be learned from. See `Docs/predict.md`.
+        Task { [capture] in
+            for application in preferences.turnedOff.subtracting(before.turnedOff) {
+                try? await capture.record(.declined, for: application)
+            }
+            for application in preferences.turnedOn.subtracting(before.turnedOn) {
+                try? await capture.record(.allowed, for: application)
+            }
+        }
     }
 
     /// Arms the tap and starts watching, or says why it cannot.
@@ -546,8 +554,8 @@ final class SuggestionCoordinator {
         let event = reason.event(holding: snapshot.currentLine, at: moment)
         guard let outcome = try? await capture.handle(event, in: reading) else { return }
         guard case .refused(let refusal) = outcome, refusal.asksTheUser else { return }
-        // The question runs a nested event loop, which no turn may sit inside, so it is asked beside the loop.
-        Task { await askAboutLearning(from: snapshot) }
+        // The Suggestions screen has already said yes to this application, so the capture store is told so.
+        Task { [capture] in try? await capture.record(.allowed, for: snapshot.bundleIdentifier) }
     }
 
     // MARK: Drawing
@@ -676,20 +684,6 @@ final class SuggestionCoordinator {
     }
 
     // MARK: Consent
-
-    /// Asks once whether this application may be learned from, and remembers the answer.
-    private func askAboutLearning(from snapshot: FocusedFieldSnapshot) async {
-        guard asked.insert(snapshot.bundleIdentifier).inserted else { return }
-        let alert = NSAlert()
-        alert.messageText = "Let Uttrflow finish what you type in \(snapshot.applicationName)?"
-        alert.informativeText =
-            "What you enter there is kept on this Mac, in Uttrflow's own folder, and is never uploaded."
-        alert.addButton(withTitle: "Learn Here")
-        alert.addButton(withTitle: "Not Here")
-        NSApplication.shared.activate()
-        let allowed = alert.runModal() == .alertFirstButtonReturn
-        try? await capture.record(allowed ? .allowed : .declined, for: snapshot.bundleIdentifier)
-    }
 
     /// What the field publishes about itself, in the shape the corpus keys entries by.
     private func reading(of snapshot: FocusedFieldSnapshot) -> FieldReading {
