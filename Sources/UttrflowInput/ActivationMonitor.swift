@@ -9,10 +9,17 @@ public final class ActivationMonitor: HotkeyMonitoring {
     private let continuation: AsyncStream<HotkeyEvent>.Continuation
     private let source: any KeyboardEventSource
     private let recogniser = Mutex<HotkeyRecogniser?>(nil)
+    /// Runs on the source's thread once a stroke has left the lock, so a test can hold it there.
+    private let strokeLeftLock: @Sendable () -> Void
 
     /// Takes the source it listens through, so a test can hand it strokes instead of a keyboard.
-    public init(source: any KeyboardEventSource = SystemKeyboard()) {
+    public convenience init(source: any KeyboardEventSource = SystemKeyboard()) {
+        self.init(source: source, strokeLeftLock: {})
+    }
+
+    init(source: any KeyboardEventSource, strokeLeftLock: @escaping @Sendable () -> Void) {
         self.source = source
+        self.strokeLeftLock = strokeLeftLock
         (events, continuation) = AsyncStream.makeStream()
     }
 
@@ -31,10 +38,12 @@ public final class ActivationMonitor: HotkeyMonitoring {
         let continuation = continuation
         do {
             try source.start { [weak self] stroke in
-                let happened = self?.recogniser.withLock { $0?.receive(stroke) } ?? nil
-                if let happened {
-                    continuation.yield(happened)
+                guard let self else { return }
+                // Yielded under the lock, so a stop's owed release cannot overtake the press it ends.
+                recogniser.withLock { current in
+                    if let happened = current?.receive(stroke) { continuation.yield(happened) }
                 }
+                strokeLeftLock()
             }
         } catch {
             throw .observationNotPermitted
@@ -44,10 +53,9 @@ public final class ActivationMonitor: HotkeyMonitoring {
     public func stop() {
         source.stop()
         // A hold interrupted by stopping is a release, or the microphone stays open.
-        let owed = recogniser.withLock { current -> HotkeyEvent? in
-            defer { current = nil }
-            return current?.finish()
+        recogniser.withLock { current in
+            if let owed = current?.finish() { continuation.yield(owed) }
+            current = nil
         }
-        if let owed { continuation.yield(owed) }
     }
 }
