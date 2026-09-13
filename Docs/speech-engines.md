@@ -62,6 +62,43 @@ relies on. `Docs/bakeoff.md` compares the engines; `Docs/offline.md` states the 
 - Not yet measured against the corpus. The same padding reaches a short final piece of a long
   dictation, which is decoded alone rather than merged into the piece before it.
 
+## Which language the recogniser may answer in
+
+- Detection is held to `LanguageCode.transcribed`, English and Hindi. WhisperKit's own detector
+  chooses among every language the model knows, and Urdu sits close enough to Hindi that spoken
+  Hindi was sometimes written in Perso-Arabic script, or decoded under the English token and so
+  came back translated. Neither can be undone after the recogniser, so the language token is
+  constrained before the text is decoded. `LanguageHeldDecoder` wraps WhisperKit's text decoder
+  and hands its detector `AllowedLanguageSampler`, which takes the likeliest allowed language.
+- The task token is always `transcribe`; `WhisperKitContractTests` and `LanguageHeldDecoderTests`
+  both read it back off the options.
+- The constraint is the product's languages, not the profile's. `UserProfile.preferredLanguages`
+  starts as English alone for everyone, so holding detection to it would force every Hindi
+  speaker who never opened Settings into English. Every language Settings offers is in the
+  transcribed set, so no choice the user can make is narrowed by it.
+- WhisperKit re-runs detection for every fallback temperature and samples it the same way it
+  samples text, top-k at that temperature. The allowed sampler ignores the temperature, so one
+  window cannot change its language between retries.
+
+## The compression ratio a Hindi decode is judged by
+
+- WhisperKit retries a window warmer when its token ids compress better than 2.4 under zlib, the
+  sign of a decode repeating itself. Devanagari is spelled in many short tokens, so a clean
+  Hindi decode compresses far better than English does. Measured on the synthetic corpus with
+  the shipping turbo model, every greedy decode confident to an average log-probability above
+  -0.1: English 1.36 to 1.69, Hindi 1.75 to 2.60. A third of the Hindi windows crossed 2.4.
+- A crossed window was re-decoded at temperature 0.2 and upwards, which samples: the same audio
+  gave different words on every run, an Arabic letter inside a Devanagari word, and a language
+  re-detected by chance. A sampled Hindi decode that really had looped measured 3.91.
+- `LanguageHeldDecoder.judged` re-reads a compression verdict for a window decoded as Hindi
+  against 3.0, and then applies the log-probability test WhisperKit would have applied next.
+  English keeps Whisper's 2.4, and every other verdict is left as WhisperKit gave it.
+- The 18 corpus passages, eight runs each, give 96 Hindi and Hinglish transcripts. Without
+  either change, 4 were wholly in Perso-Arabic script, 6 had an Arabic letter inside a
+  Devanagari word, 1 was translated into English, and overall WER moved between runs from
+  12.3% to 18.4%. With both, none of those, every run gives identical text, and overall WER is
+  11.8%. English transcripts are unchanged byte for byte.
+
 ## Per-word confidence
 
 - Correction's first condition is that the recogniser was unsure. Without a per-word figure the

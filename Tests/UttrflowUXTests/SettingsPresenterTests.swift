@@ -297,6 +297,12 @@ struct SettingsLanguagesPaneTests {
         }
     }
 
+    /// The recogniser detects only transcribed languages, so an offered one outside them could never be heard.
+    @Test("offers only languages the recogniser is allowed to detect")
+    func offersOnlyTranscribedLanguages() {
+        #expect(SettingsLanguage.offered.map(\.code) == LanguageCode.transcribed)
+    }
+
     @Test("shows the tidying level read out of the stored preference")
     func showsTheTidyingLevel() {
         var settings = Settings.default
