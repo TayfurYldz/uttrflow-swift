@@ -59,6 +59,13 @@ Decoding cleanly is not the same as being usable.
 - **The clipboard shortcut.** It has no such obligation, so an unusable one resolves to
   nothing rather than to a key the user never chose and would meet by surprise in another
   app.
+- **A modifier held on its own**, in either shape of file and for any action. Earlier builds
+  let the user choose it, so it was a decision rather than corruption, and dropping it would
+  leave the action with no shortcut and no explanation. It returns to the action's default
+  instead, the clipboard included, unless another action already holds those keys. The
+  action is added to `shortcutsReturnedToDefault`, which is stored like any other field. The
+  note therefore outlasts the save that removed the binding, and it stays until the user
+  sets that shortcut again. See `Docs/core-hotkeys.md`.
 
 ## The clipboard-shortcut collision
 

@@ -24,9 +24,22 @@ delivered by watching flag changes, and is admitted by `heldModifier` while bein
 from the registered path. Fn is the one key whose code carries no modifier flag of its
 own, so it is the one case where `modifiers` is legitimately empty.
 
-Any modifier combination is allowed as a hold, ⌘ on its own included. ⌘ alone fires on
-every ⌘C; that is the owner of the Mac's decision, not the type's. What is refused is only
-what cannot be delivered: see `isDeliverable`.
+Any combination of modifiers is allowed as a hold, and so is Fn on its own. **⌘, ⌥, ⌃ or ⇧
+on its own is not** (`isBareModifier`). This used to be left to the owner of the Mac, and
+issue 342 is what that cost: a held ⌘ fired `[pressed, released]` on every ⌘C, a held right ⌥
+ended the dictation at ⌥→ (the arrow carries the function flag and breaks the match) and began
+another at ⌥A, left and right were not told apart, and two quick ⌘-shortcuts could meet the
+double-tap rule and switch hands-free on. A key that is part of every shortcut using it can't
+also mean "dictate". Fn is the exception because `HotkeyRecogniser` reads it only from its own
+flags-changed event, which no other shortcut sends.
+
+A bare modifier is refused by `isUsable`, so it is not `isDeliverable` either. The recorder
+and `SettingsEditor` refuse it with `SettingsEditor.bareModifier`, which names the two ways
+out. A settings file that already holds one returns that action to its default when it is
+read, unless another action has taken the default keys, and records the action in
+`Settings.shortcutsReturnedToDefault`. The shortcut's row then says why until the user
+chooses again. The Carbon translator keeps its own older test, so its refusals still name a
+modifier used as a key rather than "no modifiers".
 
 The codes, held as a set rather than a range because the range they occupy is a
 coincidence of the layout tables:
