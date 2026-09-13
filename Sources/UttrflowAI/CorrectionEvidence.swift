@@ -16,8 +16,7 @@ struct CorrectionEvidence: Sendable {
 
     /// Reads both haystacks once per utterance; only words at or above `certainAt` may corroborate.
     init(utterance: Utterance, seeing context: AppContext, certainAt threshold: Double) {
-        // Split by letters and digits, not by sound: `PaymentSheet.swift` must match the entry.
-        // The title and the selection, never the application's own name: `LearnableWords` reads the same rule.
+        // The title and the selection split by letters, never the app's own name; `LearnableWords` agrees.
         onScreen = Haystack(
             TextTidy.words(
                 [context.documentName, context.selectedText]
