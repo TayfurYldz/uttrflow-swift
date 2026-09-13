@@ -1060,24 +1060,24 @@ private struct PressableRow: ButtonStyle {
 
 extension Color {
     /// The window's own greys; contrast ratios are in Docs/app-quick-panel.md.
-    static let panelSurface = Color(rgb: 0x0B_0C10)
-    static let panelCard = Color(rgb: 0x0E_1016)
-    static let panelCardHigh = Color(rgb: 0x12_151C)
-    static let panelLine = Color(rgb: 0x1E_212A)
-    static let panelLabel = Color(rgb: 0xF4_F4F6)
+    static let panelSurface = Color(rgb: BrandPalette.Surface.ground.dark)
+    static let panelCard = Color(rgb: BrandPalette.Surface.card.dark)
+    static let panelCardHigh = Color(rgb: BrandPalette.Surface.raised)
+    static let panelLine = Color(rgb: BrandPalette.Line.separator.dark)
+    static let panelLabel = Color(rgb: BrandPalette.Text.primary.dark)
     /// 7.4:1 on the panel.
-    static let panelLabelSoft = Color(rgb: 0x8B_90A0)
+    static let panelLabelSoft = Color(rgb: BrandPalette.Text.muted.dark)
     /// The dimmest grey in the design, for what the eye reaches only when it goes looking.
-    static let panelLabelDim = Color(rgb: 0x56_5B68)
+    static let panelLabelDim = Color(rgb: BrandPalette.Text.dim.dark)
     /// Below the dimmest grey, for the row glyph and the ⋯; both lift to ordinary grey when looked at.
-    static let panelGhost = Color(rgb: 0x3A_3F4A)
+    static let panelGhost = Color(rgb: BrandPalette.Text.ghost)
     /// Where you are: the focused field, the chosen row, the filter that is on, the current tab.
-    static let panelAccent = Color(rgb: 0x29_C0B4)
+    static let panelAccent = Color(rgb: BrandPalette.Teal.primary)
     /// The accent as a foreground, 12.2:1 on the panel; `panelAccent` is mixed to sit under white text.
-    static let panelAccentBright = Color(rgb: 0x5F_E0D3)
+    static let panelAccentBright = Color(rgb: BrandPalette.Teal.bright)
     /// Ink on a teal fill, where white measures 2.1:1.
-    static let panelAccentText = Color(rgb: 0x04_332F)
-    static let panelLink = Color(rgb: 0x6B_B4F5)
-    static let panelCode = Color(rgb: 0xC4_9BF5)
-    static let panelKey = Color(rgb: 0xF0_BE63)
+    static let panelAccentText = Color(rgb: BrandPalette.Teal.inkOnFill)
+    static let panelLink = Color(rgb: BrandPalette.Semantic.link)
+    static let panelCode = Color(rgb: BrandPalette.Purple.light)
+    static let panelKey = Color(rgb: BrandPalette.Semantic.key)
 }
