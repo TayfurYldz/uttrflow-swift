@@ -565,6 +565,51 @@ proportional to wakes. **The processor figure for the 30 Hz cap has not been tak
 the harness and the frame-count gate described above, and until somebody runs them the 11.3%
 row stands as the last measurement.
 
+### A card the window cannot show (#421)
+
+`WindowAttention` asked only about the window, so with the window key the card went on moving
+wherever it was inside that window. It sits at the bottom of Home's `ScrollView`, in a plain
+`VStack`, so it stays in the hierarchy when scrolled away and its `TimelineView` keeps waking. The
+window opens at the top of Home, and at the default size the card is below the fold, so that is
+the usual state of a window in use. `NSWindow.occlusionState` keeps `.visible` while any part of
+the window is on screen, so a card moved past the display's edge was not caught either.
+
+The rule now also needs `isViewVisible`: the part of the card inside its scroll view's bounds,
+measured by SwiftUI (`onGeometryChange` with `bounds(of: .scrollView)`) and reduced by
+`WindowAttention.uncoveredFrame`, has to overlap a display by an area
+(`WindowAttention.isVisible`). The frame travels to `WindowVisibility.swift`'s reporting view
+through a reference held in `@State`, so a scroll re-checks the rule without re-evaluating the
+card's body. The window's move, resize and screen notices re-check it too.
+
+Measured on 14 September 2026 on the Mac above, Release builds from `make app`: before is
+`origin/main` at 5ca34e7, after is this change on 80b5820. The window was key in the active
+application, raised through System Events, and processor time was counted only across 50 ms
+steps where it was still frontmost. "Loop" is three eight-second stretches per state, so each
+covers whole loops of the animation; "rise" is only the 0.9 s in which the panel rises, where
+the card does the most work, over three to eight loops. A card counts as moving only when window
+captures at 1.2, 1.5 and 1.8 s into the loop differ, and they did in every on-screen row.
+
+| state, window key and frontmost | before, loop | before, rise | after, loop | after, rise |
+|---|---|---|---|---|
+| card on screen | 15.4% | 28.0% | 11.9% | 40.6–41.0% |
+| card scrolled fully out of view | 18.4% | 33.2% | 1.9% | 0.9–3.2% |
+| window shortened until the scroll view hides the card | — | — | — | 1.6% |
+| card past the bottom of the display, top of the window on it | 11.6% | — | — | 1.1% |
+| History page instead of Home, for comparison | 0.2% | 2.7% | — | — |
+
+The after loop for the on-screen card was taken on a build carrying an earlier, discarded version
+of this change (below), whose answer for an on-screen card is the same.
+
+Unchanged by this, and measured on the before build with the card on Home: window partly visible
+behind another application 0.02%, fully covered 0.13%, minimised 0.18%, closed 0.4% between
+suggestion passes. The machine was otherwise in use, so the loop figures carry that noise; the
+rise figures are the cleaner comparison.
+
+**Tried and not kept: `NSView.visibleRect`.** The first version asked the reporting view, which
+is the card's `background`, for its `visibleRect` and watched every enclosing `NSClipView`. It
+does not see SwiftUI's scroll clipping: the scrolled-out card still cost 31.4% across the rise,
+and 31.1% once the window was shortened below it.
+
 ### The clipboard poll
 
 macOS offers no notification for a copy, so `PasteboardWatcher` reads the change count on a
