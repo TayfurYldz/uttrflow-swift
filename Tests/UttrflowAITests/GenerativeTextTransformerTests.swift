@@ -134,11 +134,13 @@ struct GenerativeTextTransformerTests {
         #expect(result.text == "Yes, please.")
     }
 
-    @Test("runs whatever pipeline it is given before the model")
-    func usesGivenPipeline() async throws {
+    /// The steps the user switched off are what the transformer carries; where they run is the request's.
+    @Test("leaves out the passes the user has switched off")
+    func honoursSwitchedOffSteps() async throws {
         let model = FakeCleanupModel { _ in "Um, hello there." }
         let sut = GenerativeTextTransformer(
-            kind: .foundationModels, model: model, pipeline: CleaningPipeline(passes: []))
+            kind: .foundationModels, model: model,
+            steps: CleaningSteps(switchedOff: [FillersPass.id]))
 
         _ = try await sut.transform(request("um hello there"))
         #expect(model.calls.first?.text == "Spoken: \"um hello there\"")
