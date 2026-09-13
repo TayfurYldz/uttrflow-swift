@@ -69,6 +69,12 @@ public enum SettingsPresenter {
     /// Said before anything else: a key that is not claimed does nothing, whatever the row shows.
     static let unarmed = "Uttrflow could not claim this shortcut, so it does nothing. Try another."
 
+    /// Said once a modifier held alone has been put back, so the change is not a mystery.
+    static let returnedToDefault = """
+        This was a key held on its own, which also fired on every shortcut using that key, \
+        so it is back to the default. Choose another any time.
+        """
+
     /// One shortcut's row, drawn the same way whichever shortcut it is.
 
     private static func shortcutRow(
@@ -84,6 +90,15 @@ public enum SettingsPresenter {
                 control: .shortcut(
                     action: descriptor.action,
                     keys: binding.map(SettingsShortcut.keycaps) ?? []))
+        }
+        if settings.shortcutsReturnedToDefault.contains(descriptor.action) {
+            return SettingsRow(
+                id: "shortcut.\(descriptor.action.rawValue)",
+                label: descriptor.label,
+                explanation: returnedToDefault,
+                control: .shortcut(
+                    action: descriptor.action,
+                    keys: binding.map(SettingsShortcut.keycaps(for:)) ?? []))
         }
         return SettingsRow(
             id: "shortcut.\(descriptor.action.rawValue)",
