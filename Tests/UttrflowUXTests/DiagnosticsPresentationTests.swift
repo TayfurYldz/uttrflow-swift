@@ -95,7 +95,7 @@ struct DiagnosticsLatencyTests {
         ])
 
         #expect(page.latency?.headline == "at least 2.00s")
-        #expect(page.latency?.caption.hasSuffix("without 4 stages nothing has ever timed") == true)
+        #expect(page.latency?.caption.hasSuffix("without 5 stages nothing has ever timed") == true)
     }
 
     /// "at least" on a complete journey would be its own small lie.
@@ -103,7 +103,7 @@ struct DiagnosticsLatencyTests {
     func completeTotalIsPlain() {
         let page = DiagnosticsFixture.page(measurements: Self.wholeJourney)
 
-        #expect(page.latency?.headline == "6.00s")
+        #expect(page.latency?.headline == "7.00s")
         #expect(page.latency?.caption == "each stage's typical time, added together, over 1 dictation")
     }
 
@@ -137,11 +137,11 @@ struct DiagnosticsLatencyTests {
             DiagnosticsFixture.timing(.insertion, 0.04),
         ])
 
-        #expect(page.latency?.headline == "at least 2.62s", "three of the six stages are missing")
+        #expect(page.latency?.headline == "at least 2.62s", "four of the seven stages are missing")
         #expect(
             page.latency?.caption == """
                 each stage's typical time, added together, over 1 dictation, without \
-                3 stages nothing has ever timed
+                4 stages nothing has ever timed
                 """)
     }
 
