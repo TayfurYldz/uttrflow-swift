@@ -59,7 +59,8 @@ public enum TelemetryStage: String, Sendable, Equatable, CaseIterable, Codable {
         case .transcription: self = .transcription
         case .transformation: self = .tidying
         case .insertion: self = .insertion
-        case .correction, .expansion, .drain: return nil
+        // The server's domain is closed and has no name for the opening, and audio capture is a different cost.
+        case .microphoneOpen, .correction, .expansion, .drain: return nil
         }
     }
 }

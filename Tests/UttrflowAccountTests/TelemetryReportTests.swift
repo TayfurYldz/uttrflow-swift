@@ -179,11 +179,13 @@ struct TelemetryReportTests {
         #expect(mapped == ["audio-capture", "transcription", "tidying", "insertion"])
     }
 
-    /// The backend's `pipeline_stage` domain is closed, so the two stages it cannot name stay on the Mac.
+    /// The backend's `pipeline_stage` domain is closed, so the stages it cannot name stay on the Mac.
     @Test("a stage the server cannot name is not reportable")
     func unreportableStages() {
         #expect(TelemetryStage(.correction) == nil)
         #expect(TelemetryStage(.expansion) == nil)
+        // Opening the microphone is not what the server means by audio capture, and it has no other name.
+        #expect(TelemetryStage(.microphoneOpen) == nil)
     }
 
     @Test("narrows a known language and falls back for everything else")

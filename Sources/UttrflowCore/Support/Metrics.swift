@@ -2,6 +2,8 @@
 
 /// A stage of the speak-to-inserted journey, declared in running order because reports iterate `allCases`.
 public enum PipelineStage: String, Sendable, Equatable, CaseIterable, Codable {
+    /// The microphone opening: the graph built, the tap installed, the engine started.
+    case microphoneOpen
     /// Microphone audio arriving.
     case capture
     /// Waiting for the piece that was already being transcribed when the key came up.

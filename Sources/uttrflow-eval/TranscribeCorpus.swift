@@ -420,7 +420,8 @@ struct TranscribeCorpus: AsyncParsableCommand {
     /// Names why a stage has no timing, since a zero in a latency table reads as "instant".
     private func whyNotMeasured(_ stage: PipelineStage) -> String {
         switch stage {
-        case .capture: "audio is read from disk here; what capture costs is timed in the app"
+        case .microphoneOpen, .capture:
+            "audio is read from disk here; what the microphone costs is timed in the app"
         case .transcription: "no passage reached the recogniser"
         case .correction: "no dictionary is consulted here; corrections are the app's"
         case .transformation: "clean-up was not run — pass --shipping"
