@@ -75,6 +75,32 @@ now covers only the transition. The load itself always runs, and can run *while*
 user speaks — which is strictly better, because it warms the model during the one moment
 the app knows a transcription is coming.
 
+## What a person is told during the load
+
+The menu bar is only seen when somebody opens it, so the load is also said wherever a person
+would try to dictate. Every surface reads the same `SpeechModelReadiness` the menu bar does,
+turned into `SpeechModelLoad` (`Sources/UttrflowCore/Models/SpeechModelLoad.swift`), which is
+the one home for the words and for when the minutes are said.
+
+| Where | While loading | If the load fails |
+|---|---|---|
+| Home page | A card: **Loading the speech model…** with a spinner, and the ring's status reads *Loading speech model*. "Try it now" is withheld. | **The speech model didn’t load**, with **Try Again**. |
+| Floating button | A wide pill with an hourglass: **Loading speech model…** | **Speech model didn’t load**, with **Try Again**. |
+| Shortcut or button pressed | **Speech model still loading…** through the same notice every dictation failure uses, informational, and the microphone never opens. | Dictation starts, and the recogniser tries the load again on demand. |
+| Clipboard panel | The microphone is off: *Speech model still loading*. | Off, as for a model that is not ready. |
+| Menu bar | *Getting ready…* | *Speech model didn't load* |
+
+**The minutes are said only once a load has run for five seconds** (`SpeechModelLoad.estimateAfter`).
+A warm load is over in about two, so it never claims minutes; one still going at five seconds is
+almost certainly the cold case, and from then the card reads *The first load after a restart can
+take about 2–3 minutes*, and the button's second line *First load after restart: about 2–3 min*.
+There is no progress bar, because nothing reports how far a load has got.
+
+The refusal lives in `DictationPipeline.startRecording`, which declines while its own `prepare()`
+is running. A pipeline nobody prepared still records and loads on demand, as before. When the
+load ends the refusal's notice is cleared, and every surface goes back to what it drew before.
+**Try Again** on a failed load loads again rather than starting a dictation.
+
 ## What is still true
 
 A cold load is still 154 seconds. Nothing here makes it faster; it makes the app honest

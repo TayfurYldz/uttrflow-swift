@@ -34,6 +34,10 @@ public struct DictationFailure: Sendable, Equatable {
         }
     }
 
+    /// A dictation tried while the speech model loads: nothing went wrong, it is only not ready.
+    public static let stillLoading = DictationFailure(
+        message: SpeechModelLoad.refusal, recovery: nil, severity: .informational)
+
     /// The same failure offering a different next step.
     public func offering(_ recovery: RecoveryAction?) -> DictationFailure {
         DictationFailure(message: message, recovery: recovery, severity: severity, transcript: transcript)

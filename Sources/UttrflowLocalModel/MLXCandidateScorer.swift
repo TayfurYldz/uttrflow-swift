@@ -27,13 +27,19 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing {
     private let model: LocalModel
     private let maximumTokens: Int
     private var container: ModelContainer?
+    private let bufferCache: BufferCacheControl
 
     /// Where a pass reports its timing and its failures: numbers and error text only, never the prompt.
     private static let log = Logger(subsystem: "com.uttrflow.Uttrflow", category: "predict")
 
     public init(model: LocalModel, maximumTokens: Int = 128) {
+        self.init(model: model, maximumTokens: maximumTokens, bufferCache: .mlx)
+    }
+
+    init(model: LocalModel, maximumTokens: Int, bufferCache: BufferCacheControl) {
         self.model = model
         self.maximumTokens = maximumTokens
+        self.bufferCache = bufferCache
     }
 
     /// Downloads and loads the weights, which a caller pays for deliberately rather than in a keystroke.
@@ -211,6 +217,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing {
     private func run(
         typed: String, in situation: GenerationSituation, asking ask: Ask, tokenShare: Int
     ) async throws -> Run? {
+        // Every pass is held to the cache's cap and leaves nothing in it, however it ends. See `Docs/performance.md`.
+        bufferCache.hold()
+        defer { bufferCache.clear() }
         guard let container, !Task.isCancelled,
             typed.trimmingCharacters(in: .whitespaces).count >= Self.minimumTypedLength
         else { return nil }
@@ -503,6 +512,8 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing {
 
     /// Every token the model is judged on with its log-probability, which is where a score comes from.
     public func judgedTokens(of candidate: String, following context: String) async -> [JudgedToken] {
+        bufferCache.hold()
+        defer { bufferCache.clear() }
         guard let container, !Task.isCancelled else { return [] }
         return await container.perform { loaded in
             Self.judge(candidate, following: context, with: loaded)

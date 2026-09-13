@@ -54,6 +54,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     /// Whether the recogniser can dictate, which is not whether its files are on disk.
     private var speechReadiness: SpeechModelReadiness = .notInstalled
+    /// When the load under way began, so the estimate is said only once a load has run long enough to need it.
+    private var speechLoadStarted: ContinuousClock.Instant?
+
+    /// The load as every dictation surface tells it, read from ``speechReadiness`` and nothing else.
+    private var speechModelLoad: SpeechModelLoad? {
+        speechReadiness.load(since: speechLoadStarted, now: ContinuousClock.now)
+    }
 
     /// How the recording in progress is going against ``DictationLimit``.
     private var recordingAdvice: DictationAdvice = .keepGoing
@@ -224,13 +231,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return
         }
         speechReadiness = .loading
-        refreshMenuBar()
+        speechLoadStarted = .now
+        refreshSpeechModelSurfaces()
+        // One redraw when the estimate is due, so a load that is still going starts giving the minutes.
+        Task { [weak self] in
+            try? await Task.sleep(for: SpeechModelLoad.estimateAfter)
+            guard let self, speechReadiness == .loading else { return }
+            refreshSpeechModelSurfaces()
+        }
         Task { [weak self] in
             await self?.pipeline?.prepare()
             guard let self, let pipeline else { return }
-            speechReadiness = await pipeline.isReady ? .ready : .notInstalled
-            refreshMenuBar()
+            let isReady = await pipeline.isReady
+            speechReadiness =
+                isReady ? .ready : modelStore.isInstalled(.default) ? .loadFailed : .notInstalled
+            refreshSpeechModelSurfaces()
         }
+    }
+
+    /// Redraws everywhere a person might try to dictate, from the load as it stands.
+    private func refreshSpeechModelSurfaces() {
+        refreshMenuBar()
+        dock.update(with: dockPresentation(for: lastDictationState))
+        // Guarded here, since the redraw also wakes the updater, which launch starts last on purpose.
+        if mainWindow != nil { redrawMainWindow() }
+    }
+
+    /// The floating button for a state, with the speech model's load drawn in.
+    private func dockPresentation(for state: DictationState) -> DockPresentation {
+        DictationPresenter.dock(for: state, advice: recordingAdvice, speechModel: speechModelLoad)
     }
 
     /// Asks each clean-up engine whether it could run, so Diagnostics has an answer to show.
@@ -475,7 +504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         guard advice != recordingAdvice else { return }
         recordingAdvice = advice
         refreshMenuBar()
-        dock.update(with: DictationPresenter.dock(for: lastDictationState, advice: advice))
+        dock.update(with: dockPresentation(for: lastDictationState))
     }
 
     private func wireInterface() {
@@ -697,10 +726,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             return .unavailable(.microphoneNotGranted)
         }
         // The same question the menu bar asks: loaded, not merely on disk.
-        guard speechReadiness == .ready else {
-            return .unavailable(.modelNotReady(percent: nil))
+        switch speechReadiness {
+        case .ready: return .ready
+        case .loading: return .unavailable(.modelLoading)
+        case .downloading, .loadFailed, .notInstalled: return .unavailable(.modelNotReady(percent: nil))
         }
-        return .ready
     }
 
     /// A8 — answers a keystroke, noting first whether the application underneath has quit.
@@ -1069,7 +1099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Cleared as soon as the recording ends, so a countdown cannot outlive it.
         if !state.isListening { recordingAdvice = .keepGoing }
         menuBar.update(with: MenuBarPresenter.present(menuBarState(for: state)))
-        dock.update(with: DictationPresenter.dock(for: state, advice: recordingAdvice))
+        dock.update(with: dockPresentation(for: state))
         refreshMainWindow()
 
         scheduleDismissal(after: state)
@@ -1284,7 +1314,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
                     local: knownLocalAccount,
                     // The name macOS knows, read here so a test decides who is greeted.
                     systemName: NSFullUserName(),
-                    shortcut: shortcut, settings: settings, now: now)),
+                    shortcut: shortcut, settings: settings, now: now,
+                    speechModel: speechModelLoad)),
             sidebar: SidebarPresenter.sidebar(
                 for: SidebarSnapshot(
                     // The page the window shows; Settings is a window and lights nothing.
@@ -1686,6 +1717,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         switch action {
         case .openSystemSettings(let pane):
             Task { await openSettingsPane(pane) }
+        // A failed load is retried by loading again, since a dictation would only repeat the wait.
+        case .retry where speechReadiness == .loadFailed:
+            loadSpeechModel()
         case .retry:
             // A toggle, not a synthesised keypress with no release to close it.
             Task { [weak self] in await self?.controller?.toggleFromControl() }

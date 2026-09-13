@@ -141,6 +141,9 @@ public actor DictationPipeline {
     /// Whether the recogniser has loaded and the next dictation will not wait for it.
     public private(set) var isReady = false
 
+    /// Whether `prepare` is loading the recogniser right now, which is when a new dictation is refused.
+    public private(set) var isLoading = false
+
     /// Every state the pipeline passes through, from now on.
     public func states() -> AsyncStream<DictationState> {
         observers.makeStream(startingWith: state)
@@ -148,6 +151,8 @@ public actor DictationPipeline {
 
     /// Loads the speech model so the first dictation is not the slow one. See `Docs/startup.md`.
     public func prepare() async {
+        isLoading = true
+        defer { isLoading = false }
         do {
             try await speech.prepare()
             isReady = true
@@ -174,6 +179,8 @@ public actor DictationPipeline {
     /// Begins listening. Does nothing if a dictation is already under way.
     public func startRecording() async {
         guard !isBusy else { return }
+        // Said rather than recorded: the words would wait behind the load, under a button saying nothing.
+        guard !isLoading else { return transition(to: .failed(.stillLoading)) }
         hasTurn = true
         defer { hasTurn = false }
 
@@ -508,7 +515,8 @@ public actor DictationPipeline {
         if state == .transcribing { transition(to: .tidying) }
         let joining = SituationResolver.resolve(
             from: appContext ?? AppContext(), overrides: runningOverrides)
-        let whole = PieceJoiner.join(pieces, under: .standard(for: joining.destination))
+        let joined = PieceJoiner.join(pieces, under: .standard(for: joining.destination))
+        let whole = await finishMessage(joined, going: joining, seeing: appContext ?? AppContext())
 
         // Inserting a blank would delete the user's selection, so it is refused like silence.
         guard !whole.cleaned.text.isBlank else {
@@ -630,7 +638,8 @@ public actor DictationPipeline {
         // Every piece of a dictation is tidied against the one screen read, so all see one situation.
         let request = TransformationRequest(
             transcription: transcription.saying(corrected), context: appContext, profile: profile,
-            situation: SituationResolver.resolve(from: appContext, overrides: runningOverrides))
+            situation: SituationResolver.resolve(from: appContext, overrides: runningOverrides),
+            scope: .piece)
         // Not `.rules`: no pass ran over these words, and a record that says otherwise cannot be read.
         let untidied = TransformationResult(text: text, producedBy: .untidied)
 
@@ -648,6 +657,22 @@ public actor DictationPipeline {
         } catch {
             return untidied
         }
+    }
+
+    /// Asks the cleaner for the message's own passes once over the joined pieces; untidied words stay as they were.
+    private func finishMessage(
+        _ joined: Piece, going situation: Situation, seeing appContext: AppContext
+    ) async -> Piece {
+        guard joined.cleaned.producedBy != .untidied else { return joined }
+        let request = TransformationRequest(
+            transcription: joined.heard.saying(joined.corrected), context: appContext, profile: profile,
+            situation: situation)
+        let finished = await runningCleaner.finishMessage(joined.cleaned.text, for: request)
+        return Piece(
+            heard: joined.heard, corrected: joined.corrected,
+            cleaned: TransformationResult(
+                text: finished, producedBy: joined.cleaned.producedBy,
+                cleaning: joined.cleaned.cleaning, entriesTaken: joined.cleaned.entriesTaken))
     }
 
     /// Expands the user's snippets, treating a blank expansion as nothing to do.

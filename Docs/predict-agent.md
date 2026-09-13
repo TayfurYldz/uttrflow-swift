@@ -140,7 +140,7 @@ recorded in `predict-reliability.md`.
   the first word among programs and aliases, git's second word among its subcommands and aliases, a
   path from here by its first name and a dotfile by name among the files listed. A word the machine
   has listed nothing like drops the line; when every line is dropped the turn is quiet for
-  `notOnThisMachine`, and the log names what was dropped (`ATTEST … dropped=`). Until A1, a flag, a
+  `notOnThisMachine`, and the log counts what was dropped (`ATTEST … dropped=`). Until A1, a flag, a
   number, a quotation, an expansion, an address and a plain argument are not asked about, since
   position alone cannot say whether `npm observe` names a file; a machine that has not answered yet
   denies nothing. The alternatives behind the drawn line go through the same gate.

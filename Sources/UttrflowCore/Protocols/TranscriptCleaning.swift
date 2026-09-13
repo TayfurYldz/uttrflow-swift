@@ -9,11 +9,19 @@ public protocol TranscriptCleaning: Sendable {
 
     /// Gets ready for a request going to `situation`, or to nowhere known, so the first one is not the slow one.
     func warm(for situation: Situation?) async
+
+    /// Finishes a message joined from pieces cleaned at `.piece` scope: its casing and its final stop, asked once.
+    func finishMessage(_ text: String, for request: TransformationRequest) async -> String
 }
 
 extension TranscriptCleaning {
     /// Nothing to prepare, which is what most cleaners have.
     public func warm(for situation: Situation?) async {}
+
+    /// The message as joined, which is right for a cleaner that finishes each piece itself.
+    public func finishMessage(_ text: String, for request: TransformationRequest) async -> String {
+        text
+    }
 }
 
 /// Puts finished text wherever the user is typing and says how; the pipeline never sees the strategies.
