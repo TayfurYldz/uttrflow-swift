@@ -39,6 +39,9 @@ public struct BudgetReading: Sendable, Equatable {
         self.label = label
         self.footprintBytes = footprintBytes
     }
+
+    /// Whether the reading is over its state's limit, the one test both the judge and a report use.
+    public var isOverBudget: Bool { footprintBytes > state.limitInBytes }
 }
 
 /// A reading over its state's limit.
@@ -59,7 +62,7 @@ public struct BudgetBreach: Sendable, Equatable, CustomStringConvertible {
 public enum ResourceBudget {
     /// Every reading over its state's limit, in the order they were taken.
     public static func breaches(in readings: [BudgetReading]) -> [BudgetBreach] {
-        readings.filter { $0.footprintBytes > $0.state.limitInBytes }.map(BudgetBreach.init)
+        readings.filter(\.isOverBudget).map(BudgetBreach.init)
     }
 }
 

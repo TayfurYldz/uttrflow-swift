@@ -6,15 +6,15 @@ import UttrflowEval
 enum BudgetVerdict {
     static func enforce(_ readings: [BudgetReading]) throws {
         let breaches = ResourceBudget.breaches(in: readings)
-        let highest = Dictionary(grouping: readings, by: \.state).mapValues {
-            $0.map(\.footprintBytes).max() ?? 0
+        let highest = Dictionary(grouping: readings, by: \.state).compactMapValues {
+            $0.max { $0.footprintBytes < $1.footprintBytes }
         }
         print("\nMemory budget")
         for state in BudgetedState.allCases {
-            guard let bytes = highest[state] else { continue }
-            let mark = bytes > state.limitInBytes ? "✗" : "✓"
+            guard let reading = highest[state] else { continue }
+            let mark = reading.isOverBudget ? "✗" : "✓"
             print(
-                "  \(mark) \(state.rawValue): highest \(bytes / 1_048_576) MB of \(state.limitInMegabytes) MB"
+                "  \(mark) \(state.rawValue): highest \(reading.footprintBytes / 1_048_576) MB of \(state.limitInMegabytes) MB"
             )
         }
         guard !breaches.isEmpty else { return }

@@ -207,7 +207,7 @@ def seconds(tree, expression, path, depth=0):
     """The expression's value in seconds when the source settles it, otherwise None."""
     if depth > 8:
         return None
-    expression = expression.strip().replace("_", "")
+    expression = re.sub(r"(?<=\d)_(?=\d)", "", expression.strip())
     for unit, scale in UNITS.items():
         pattern = re.compile(r"(?:Duration|DispatchTimeInterval)?\s*\.\s*" + unit + r"\s*\(")
         while True:
@@ -244,12 +244,19 @@ def seconds(tree, expression, path, depth=0):
         node = ast.parse(expression, mode="eval")
     except (LookupError, SyntaxError):
         return None
+    return arithmetic(node)
+
+
+def arithmetic(node):
+    """The value of a parsed expression made only of numbers and + - * /, otherwise None."""
     allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.USub)
     if not all(isinstance(child, allowed) for child in ast.walk(node)):
         return None
+    if any(isinstance(child, ast.Constant) and not isinstance(child.value, (int, float)) for child in ast.walk(node)):
+        return None
     try:
-        return float(eval(compile(node, "<interval>", "eval")))
-    except (ZeroDivisionError, TypeError):
+        return float(eval(compile(node, "<arithmetic>", "eval")))
+    except (ZeroDivisionError, TypeError, OverflowError):
         return None
 
 
@@ -519,13 +526,13 @@ def check_cache(tree, findings, report):
         findings.failures.append(f"cache: {limit_file} no longer declares GPUBufferCache.limit")
     else:
         try:
-            value = eval(compile(ast.parse(limit.group(1).replace("_", ""), mode="eval"), "<limit>", "eval"))
-        except (SyntaxError, NameError):
+            value = arithmetic(ast.parse(re.sub(r"(?<=\d)_(?=\d)", "", limit.group(1).strip()), mode="eval"))
+        except SyntaxError:
             value = None
         if value is None or value > CACHE_CAP:
             findings.failures.append(f"cache: GPUBufferCache.limit is `{limit.group(1).strip()}`, over {CACHE_CAP // 1_048_576} MB")
         else:
-            report.append(f"  ✓ GPUBufferCache.limit is {value // 1_048_576} MB")
+            report.append(f"  ✓ GPUBufferCache.limit is {int(value) // 1_048_576} MB")
     report.append(f"  ✓ {passes} model passes read in {len(mlx_files)} MLX files")
 
 

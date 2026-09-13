@@ -33,6 +33,8 @@ struct ResourceBudgetTests {
         let breaches = ResourceBudget.breaches(in: [reading(.idleSuggestionsOff, 120), over])
         #expect(breaches == [BudgetBreach(reading: over)])
         #expect(breaches.first?.excessBytes == 1)
+        #expect(over.isOverBudget)
+        #expect(!reading(.dictationPeak, 400).isOverBudget)
     }
 
     @Test("a release that leaves the model behind breaches the idle line")
@@ -46,8 +48,8 @@ struct ResourceBudgetTests {
 
     @Test("breaches come back in the order the readings were taken")
     func orderIsKept() {
-        let first = reading(.suggestionsPassPeak, 4_000)
-        let second = reading(.suggestionsBetweenPasses, 3_100)
+        let first = reading(.suggestionsBetweenPasses, 3_100)
+        let second = reading(.suggestionsPassPeak, 4_000)
         #expect(ResourceBudget.breaches(in: [first, second]).map(\.reading) == [first, second])
     }
 }
