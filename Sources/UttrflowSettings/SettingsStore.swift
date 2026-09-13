@@ -261,7 +261,7 @@ extension Settings {
         if let clipboard, clipboard.isDeliverable, clipboard != dictation {
             migrated.replace(at: 0, with: clipboard, for: .clipboard)
         } else if clipboard?.isBareModifier != true || fallback.first(for: .clipboard) == dictation {
-            // A modifier held alone was a choice this build refuses, so it keeps the default instead of nothing.
+            // Dropped, except a modifier held alone: this build refuses that choice, so it leaves the default in place.
             migrated.remove(at: 0, from: .clipboard)
         }
         return migrated
