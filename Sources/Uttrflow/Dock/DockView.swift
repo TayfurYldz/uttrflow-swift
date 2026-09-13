@@ -557,28 +557,28 @@ extension View {
 
 extension Color {
     /// Fills that carry text, capped at 29% lightness so white 13-point text clears 4.5:1.
-    static let dockAccent = Color(rgb: 0x12_8077)
+    static let dockAccent = Color(rgb: BrandPalette.Teal.deep)
     /// Controls and graphics with no text on them.
-    static let dockAccentLight = Color(rgb: 0x39_D0C4)
-    static let dockAccentTint = Color(rgb: 0x9E_DCD7)
-    static let dockAccentWash = Color(rgb: 0xEF_F8F7)
+    static let dockAccentLight = Color(rgb: BrandPalette.Teal.light)
+    static let dockAccentTint = Color(rgb: BrandPalette.Teal.tint)
+    static let dockAccentWash = Color(rgb: BrandPalette.Teal.wash)
     /// Recording and destructive: the main window's critical tone and its destructive buttons.
-    static let dockRecording = Color(rgb: 0xFF_383C)
+    static let dockRecording = Color(rgb: BrandPalette.Semantic.recording)
     /// The live accent: what is selected, what is running, the weight the meter hangs off.
-    static let dockActive = Color(rgb: 0x29_C0B4)
+    static let dockActive = Color(rgb: BrandPalette.Teal.primary)
     /// Ink for the mark inside the weight's disc; fixed, since the disc is the same teal in both appearances.
-    static let dockWeightInk = Color(rgb: 0x04_100F)
-    static let dockSuccess = Color(rgb: 0x34_C759)
-    static let dockWarning = Color(rgb: 0xFF_8D28)
+    static let dockWeightInk = Color(rgb: BrandPalette.Teal.inkOnDisc)
+    static let dockSuccess = Color(rgb: BrandPalette.Semantic.success)
+    static let dockWarning = Color(rgb: BrandPalette.Semantic.warning)
 
     /// The waveform teal, deepened on a light desktop where the bright one vanishes against the glass.
-    static let dockWaveform = Color(nsColor: .orbit(dark: 0x00_C3D0, light: 0x06_7A87))
+    static let dockWaveform = Color(nsColor: .orbit(BrandPalette.Teal.waveform))
 }
 
 extension LinearGradient {
     /// The accent as a filled control, deepened at the top so the fill reads as lit from above.
     static var accentFill: LinearGradient {
         LinearGradient(
-            colors: [Color(rgb: 0x17_968C), .dockAccent], startPoint: .top, endPoint: .bottom)
+            colors: [Color(rgb: BrandPalette.Teal.deepLit), .dockAccent], startPoint: .top, endPoint: .bottom)
     }
 }

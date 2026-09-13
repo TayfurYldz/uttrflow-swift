@@ -50,3 +50,13 @@ stopped when the panel closed demonstrated a mechanism and left out the payoff.
   it rests on the panel open with the address row chosen. Its clock wakes only when the drawing
   changes, and at most 30 times a second while the panel moves (`ClipboardDemonstrationMoments`).
   See `Docs/performance.md`.
+
+## Colours
+
+`Sources/Uttrflow/Brand/BrandPalette.swift` is the only place a colour is defined. It groups
+every value by role — brand teal, brand purple, surfaces, lines, text tones and semantic
+colours — each as a dark and light pair where the appearance changes it. Views name a palette
+member, through aliases such as `Color.panelAccent` or `Color.mainBackground`; none writes a hex.
+Where two views draw the same value they point at the same member, so the dock's live accent
+and the quick panel's accent cannot drift apart. `NSColor.orbit(_:)` in `OrbitPalette.swift`
+resolves a pair per appearance. `BrandPaletteTests` pins the primary teal and secondary purple.
