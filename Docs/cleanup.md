@@ -265,6 +265,22 @@ one model call per piece — is `Docs/cleanup-design.md`. Below is where things 
   the words the passes kept, so a pass's removal is never counted as the model dropping
   words, and against the readings it was offered: a doubtful run must come back as it
   was heard or as one of them.
+- **A pass's removal counts as authorised only within its grant.** Each `CleaningPass`
+  declares a `RemovalGrant`: `FillersPass` removes a `.sound`, which is never a numeral or
+  a word in capitals; `StammersPass` and `RepeatedPhrasePass` remove a `.repetition`,
+  whose word is said again within the next four kept words; `SelfCorrectionPass` removes
+  a `.retraction`; every other pass only `.conversion`s, so each word it removes sits in
+  a run it also wrote a mark, numeral or contraction into. `RemovalAudit` reads the
+  draft's own record against those grants, and a retraction that took nothing back —
+  its taken-back words said again unchanged straight after, as in "tell the landlord no,
+  the landlord has to wait" — has no grant for a one-word negating trigger. A content
+  word or a negation removed beyond its grant is still the rewrite's to carry: the guard
+  refuses a rewrite without it ("the fillers step took out 'ER' …") and accepts one that
+  puts it back rather than calling it invented. The refusal hands the dictation to the
+  rules, which lose the same word, so what it buys is a named refusal in Diagnostics
+  instead of a silent loss; the word itself comes back only when the pass is fixed.
+  `RemovalGrantCorpusTests` lists every corpus case whose passes overreach, so the guard's
+  verdict can differ from the kept-words-only one on those cases and no others. Issue 239.
 - `CorrectionEngine` and the dictionary handle spellings before the tidier sees the text.
 - The pieces cut while recording (`Docs/early-transcription.md`) are each tidied alone,
   which is why paragraph breaks and list layout have to be decided when the pieces are
