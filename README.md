@@ -5,7 +5,7 @@
   </a>
 </p>
 
-<p align="center"><b>Dictation, a smart clipboard and suggestions, in one native macOS app.</b></p>
+<p align="center"><b>Dictation, a smart clipboard and AI suggestions, in one native macOS app.</b></p>
 
 <p align="center">Open source. Your voice never leaves your Mac.</p>
 
@@ -60,7 +60,7 @@
 **In the code:** `UttrflowClipboard` and `Sources/Uttrflow/Panel`. Read
 [`Docs/panel.md`](Docs/panel.md) and [`Docs/clipboard-secrets.md`](Docs/clipboard-secrets.md).
 
-## ⇥ Suggestions: Any tool, get suggestions at the speed of thought
+## ⇥ AI suggestions: Any tool, get suggestions at the speed of thought
 
 <p align="center">
   <img src="Docs/media/readme-suggestions.png" width="820"
@@ -114,7 +114,7 @@ Homebrew quarantines what it downloads too, so the command is needed after eithe
 | Dictation accuracy or speed | `Sources/UttrflowSpeech`, `Sources/UttrflowAI` | [`Docs/cleanup.md`](Docs/cleanup.md), [`Docs/measuring-accuracy.md`](Docs/measuring-accuracy.md) |
 | The dock button | `Sources/Uttrflow/Dock` | [`Docs/app-dock.md`](Docs/app-dock.md) |
 | The clipboard panel | `Sources/UttrflowClipboard`, `Sources/Uttrflow/Panel` | [`Docs/panel.md`](Docs/panel.md) |
-| Suggestions | `Sources/UttrflowPredict`, `Sources/Uttrflow/Suggestion` | [`Docs/predict.md`](Docs/predict.md), [`Docs/predict-accept.md`](Docs/predict-accept.md) |
+| AI suggestions | `Sources/UttrflowPredict`, `Sources/Uttrflow/Suggestion` | [`Docs/predict.md`](Docs/predict.md), [`Docs/predict-accept.md`](Docs/predict-accept.md) |
 | Typing into other apps | `Sources/UttrflowInput` | [`Docs/insertion.md`](Docs/insertion.md) |
 
 ## 🤝 Build it with us
@@ -155,7 +155,7 @@ Thank you to everyone who has sent a fix, filed an issue or asked a good questio
   hold it, and the shortcut can be changed in Settings.
 - **Dictionary.** A name the recogniser keeps getting wrong is fixed once; matching is by
   sound, so spellings you have not seen yet are caught too.
-- **Tab-to-complete**, once you turn it on in Settings → Suggestions. The rest of the line
+- **Tab-to-complete**, once you turn it on in Settings → AI suggestions. The rest of the line
   appears in grey ahead of the caret as you type; **Tab** takes it, typing on ignores it,
   and ↓ opens the alternatives when there is more than one. Tab is already spoken for in a
   terminal and in an editor, so those take a completion with **→** and **⌥Tab** instead,
