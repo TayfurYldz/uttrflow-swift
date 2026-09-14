@@ -51,7 +51,7 @@
        alt="The clipboard panel open over a terminal: a search for pg, kind filters, and clips for SQL, a link, a masked secret with an alias, a shell command, a colour and a file path.">
 </p>
 
-**⇧⌘V** opens it · **↑↓** choose · **⌘1–⌘9** choose a collection · **⏎** paste · **⌘⏎** paste as plain text · **⌘Z** undo a delete · **esc** close
+**⇧⌘V** opens it · **↑↓** choose · **⌘1** All · **⌘2–⌘9** choose a collection · **⏎** paste · **⌘⏎** paste as plain text · **⌘Z** undo a delete · **esc** close
 
 - It knows code (with a language chip), links, colours, images and paths.
 - It re-indents or formats code, and shows you the diff first.
@@ -147,7 +147,7 @@ Thank you to everyone who has sent a fix, filed an issue or asked a good questio
 <summary><b>Shortcuts and permissions</b></summary>
 
 - **⇧⌘V** opens the clipboard over whatever you are typing in. Type to filter, or type an
-  alias you gave a clip. ↑↓ to choose, **⌘1–⌘9** to choose a collection, ⏎ to paste where the caret already was, **⌘⏎** to
+  alias you gave a clip. ↑↓ to choose, **⌘1** for All, **⌘2–⌘9** to choose a collection, ⏎ to paste where the caret already was, **⌘⏎** to
   paste as plain text however it was copied, **⌘Z** to undo a delete, Esc to close. The window underneath never loses
   focus.
 - **Hold ⌥Space** and talk. Let go, and the words land at the cursor in the app you were
