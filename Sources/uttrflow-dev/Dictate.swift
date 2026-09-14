@@ -86,17 +86,19 @@ extension SpeechWindowing {
         anyPause: .infinity, maximumLength: .infinity)
 }
 
-/// A microphone that plays a file at real time, so working ahead has something to work on.
-private actor PlaybackCaptureEngine: AudioCaptureEngine {
+/// A microphone that plays a file at real time, or hands it over at once, so working ahead has something to work on.
+actor PlaybackCaptureEngine: AudioCaptureEngine {
     private let audio: AudioSamples
     private let sharesEarly: Bool
+    private let realTime: Bool
     private let accumulator = SampleAccumulator()
     private var currentState: AudioCaptureState = .idle
     private var feeder: Task<Void, Never>?
 
-    init(audio: AudioSamples, sharesEarly: Bool) {
+    init(audio: AudioSamples, sharesEarly: Bool, realTime: Bool = true) {
         self.audio = audio
         self.sharesEarly = sharesEarly
+        self.realTime = realTime
     }
 
     var state: AudioCaptureState { currentState }
@@ -108,6 +110,11 @@ private actor PlaybackCaptureEngine: AudioCaptureEngine {
         let block = audio.sampleRate / 10
         let samples = audio.samples
         let accumulator = self.accumulator
+        // All at once is a key held for exactly as long as the file, with nothing left to do but the release.
+        guard realTime else {
+            accumulator.append(samples)
+            return
+        }
         feeder = Task {
             var cursor = 0
             let started = ContinuousClock.now
@@ -146,12 +153,12 @@ private actor PlaybackCaptureEngine: AudioCaptureEngine {
 }
 
 /// Nothing on screen, which is what the command line has.
-private struct NoScreen: ContextEngine {
+struct NoScreen: ContextEngine {
     func currentContext() async -> AppContext { AppContext() }
 }
 
 /// Puts the words on standard output rather than into another app.
-private struct PrintingInserter: TextInserting {
+struct PrintingInserter: TextInserting {
     func insert(_ text: String) async throws(TextInsertionError) -> InsertionAttempt {
         InsertionAttempt(.pasteboard)
     }

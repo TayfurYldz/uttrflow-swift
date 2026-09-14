@@ -38,13 +38,21 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
 
     init(
         model: LocalModel, maximumTokens: Int, bufferCache: BufferCacheControl,
-        cache: URL = HubCache.default.cacheDirectory
+        cache: URL = HubCache.default.cacheDirectory, loading: WeightLoading<ModelContainer> = .mlx
     ) {
         self.model = model
         self.maximumTokens = maximumTokens
         self.bufferCache = bufferCache
         self.cache = cache
+        self.weights = ReloadableWeights(loading: loading)
     }
+
+    /// The model's modules, built on the first load and only emptied and refilled after it. See `Docs/performance.md`.
+    private let weights: ReloadableWeights<ModelContainer>
+
+    /// How many passes are using the model now, which a release waits out before it empties the weights.
+    private var passesRunning = 0
+    private var waitingForPasses: [CheckedContinuation<Void, Never>] = []
 
     /// The Hugging Face cache a whole model is loaded from without asking the hub.
     private let cache: URL
@@ -57,7 +65,10 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         defer { bufferCache.clear() }
         let directory = try await model.weightsDirectory(
             cache: cache, downloader: { #hubDownloader() }, onProgress: onProgress)
-        container = try await QuantizedLoad.container(from: directory, using: #huggingFaceTokenizerLoader())
+        guard let loaded = try await weights.load(from: directory) else { return }
+        container = loaded
+        beginPass()
+        defer { endPass() }
         warm = await warmInstructions()
         prompt = await promptTokens(
             addedTokens: AddedToken.read(fromTokenizerFile: directory.appending(path: "tokenizer.json")))
@@ -66,15 +77,47 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                 tokenizer: context.tokenizer, endOfTurn: context.configuration.extraEOSTokens,
                 endingIds: context.configuration.eosTokenIds)
         }
+        // A release that landed while the instructions were read leaves nothing of them behind.
+        if container == nil { forgetReadings() }
     }
 
-    /// Drops the weights and everything read from them, and hands the freed GPU buffers back to the system.
-    public func release() {
+    /// Empties the weights once every pass using them has ended, and hands the freed GPU buffers back to the system.
+    public func release() async {
         container = nil
+        forgetReadings()
+        await passesEnded()
+        await weights.unload()
+        bufferCache.clear()
+    }
+
+    /// Builds the model's modules from placeholders and reads its weights, so even the first load leaves no quantize graph.
+    static func buildContainer(from directory: URL) async throws -> ModelContainer {
+        try await QuantizedLoad.container(from: directory, using: #huggingFaceTokenizerLoader())
+    }
+
+    /// Drops everything read from the weights.
+    private func forgetReadings() {
         warm = nil
         prompt = nil
         vocabulary = nil
-        bufferCache.clear()
+    }
+
+    /// Marks a pass as using the model.
+    private func beginPass() { passesRunning += 1 }
+
+    /// Marks a pass as done, resuming a release that was waiting for the last one.
+    private func endPass() {
+        passesRunning -= 1
+        guard passesRunning == 0 else { return }
+        let waiting = waitingForPasses
+        waitingForPasses = []
+        waiting.forEach { $0.resume() }
+    }
+
+    /// Returns once no pass is using the model.
+    private func passesEnded() async {
+        guard passesRunning > 0 else { return }
+        await withCheckedContinuation { waitingForPasses.append($0) }
     }
 
     /// The instructions as the model has already read them, so a pass pays only for the moment's own tokens.
@@ -257,6 +300,8 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         guard let container, !Task.isCancelled,
             typed.trimmingCharacters(in: .whitespaces).count >= Self.minimumTypedLength
         else { return nil }
+        beginPass()
+        defer { endPass() }
         // The register decides how much of a pass this line is worth: a command a little, a paragraph more.
         let register = Register.infer(from: situation, typed: typed)
         // A host and a search phrase are not things a model can know: each exists in this person's history or nowhere, so a guess at one is refused rather than drawn. See `Docs/predict-precision.md`.
@@ -271,8 +316,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let perLine = register.maxTokens
         let cap = maximumTokens
         let stream: AsyncStream<Generation>
+        let generation: Task<Void, Never>
         do {
-            stream = try await container.perform { loaded in
+            (stream, generation) = try await container.perform { loaded in
                 try Task.checkCancellation()
                 var context = loaded
                 // The producer ends at the newline itself when one line is wanted, so no decode step is spent past it.
@@ -305,26 +351,28 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                     maxTokens: Self.tokenBudget(perLine: perLine, lines: tokenShare, echo: echo, cap: cap),
                     temperature: 0)
                 try Task.checkCancellation()
-                guard let opening, let vocabulary else {
-                    return try MLXLMCommon.generate(
-                        input: feed, cache: cache, parameters: parameters, context: context)
+                let iterator: TokenIterator
+                if let opening, let vocabulary {
+                    // The first tokens are held to the word being typed, or to one of the machine's values, so the model continues rather than invents.
+                    let processor: any LogitProcessor =
+                        if let choice {
+                            TokenChoice(vocabulary: vocabulary, choices: choice.choices)
+                        } else {
+                            TokenHealing(
+                                vocabulary: vocabulary, owed: opening.owed,
+                                wordComplete: opening.isWordComplete,
+                                mayEnd: opening.mayEnd)
+                        }
+                    iterator = try TokenIterator(
+                        input: feed, model: context.model, cache: cache, processor: processor,
+                        sampler: parameters.sampler(), maxTokens: parameters.maxTokens)
+                } else {
+                    iterator = try TokenIterator(
+                        input: feed, model: context.model, cache: cache, parameters: parameters)
                 }
-                // The first tokens are held to the word being typed, or to one of the machine's values, so the model continues rather than invents.
-                let processor: any LogitProcessor =
-                    if let choice {
-                        TokenChoice(vocabulary: vocabulary, choices: choice.choices)
-                    } else {
-                        TokenHealing(
-                            vocabulary: vocabulary, owed: opening.owed, wordComplete: opening.isWordComplete,
-                            mayEnd: opening.mayEnd)
-                    }
-                let iterator = try TokenIterator(
-                    input: feed, model: context.model, cache: cache, processor: processor,
-                    sampler: parameters.sampler(), maxTokens: parameters.maxTokens)
                 return generateTask(
                     promptTokenCount: feed.text.tokens.size, modelConfiguration: context.configuration,
-                    tokenizer: context.tokenizer, iterator: iterator
-                ).0
+                    tokenizer: context.tokenizer, iterator: iterator)
             }
         } catch is CancellationError {
             // A cancelled pass answers a line that is gone, and nothing is drawn for it either way.
@@ -341,6 +389,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
             case .toolCall: break
             }
         }
+        // The decode stops before the pass ends, so a release never empties weights a step is still reading.
+        generation.cancel()
+        await generation.value
         if let info {
             Self.log.debug(
                 "PASS prompt=\(info.promptTokenCount) promptMs=\(Int(info.promptTime * 1_000)) generated=\(info.generationTokenCount) generateMs=\(Int(info.generateTime * 1_000))"
@@ -555,6 +606,8 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         bufferCache.hold()
         defer { bufferCache.clear() }
         guard let container, !Task.isCancelled else { return [] }
+        beginPass()
+        defer { endPass() }
         return await container.perform { loaded in
             Self.judge(candidate, following: context, with: loaded)
         }
@@ -602,4 +655,35 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         let start = max(shared, 1)
         return whole.count > start ? start : nil
     }
+}
+
+extension WeightLoading<ModelContainer> {
+    /// Builds through mlx-swift-lm once, then swaps weights in place so a reload never quantises fresh arrays. See `Docs/performance.md`.
+    static let mlx = WeightLoading(
+        build: { try await MLXCandidateScorer.buildContainer(from: $0) },
+        refill: { container, directory in
+            try await container.perform { context in
+                var weights = [String: MLXArray]()
+                var metadata = [String: String]()
+                let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil)
+                while let url = files?.nextObject() as? URL {
+                    guard url.pathExtension == "safetensors" else { continue }
+                    let (read, readMetadata) = try loadArraysAndMetadata(url: url)
+                    weights.merge(read) { _, new in new }
+                    if metadata.isEmpty { metadata = readMetadata }
+                }
+                weights = context.model.sanitize(weights: weights, metadata: metadata)
+                try context.model.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
+                eval(context.model)
+            }
+        },
+        empty: { container in
+            await container.perform { context in
+                // A placeholder of the same shape that is never evaluated holds no buffer, and a refill still checks every shape.
+                let placeholders = context.model.parameters().mapValues {
+                    MLXArray.zeros($0.shape, dtype: $0.dtype)
+                }
+                context.model.update(parameters: placeholders)
+            }
+        })
 }
