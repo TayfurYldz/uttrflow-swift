@@ -643,7 +643,7 @@ INJECTIONS = (
     ),
     (
         "Sources/UttrflowLocalModel/MLXCandidateScorer.swift",
-        "        vocabulary = nil\n        bufferCache.clear()", "        vocabulary = nil", "cache",
+        "        await weights.unload()\n        bufferCache.clear()", "        await weights.unload()", "cache",
     ),
     (
         "Sources/UttrflowLocalModel/GPUBufferCache.swift",
