@@ -168,9 +168,9 @@ notarise-dmg: ## Notarise and staple the disk image. Needs Apple credentials.
 # Doing it the other way round leaves the app depending on a ticket stapled to a disk
 # image the user no longer has.
 # The version is Resources/Uttrflow-Info.plist and nothing else — edited by hand when a
-# release is cut, which for semantic versioning is the only moment the number can be
-# decided anyway. CFBundleShortVersionString is what people see (0.1.0);
-# CFBundleVersion is the build counter beside it, and only has to increase.
+# release is cut, since a calendar version is the date that happens on. CFBundleShortVersionString
+# is what people see (2026.9.14); CFBundleVersion is the build counter the updater compares,
+# and has to increase every release.
 .PHONY: release
 release: app-dist notarise dmg notarise-dmg ## Build, notarise and package a shippable disk image.
 	@echo

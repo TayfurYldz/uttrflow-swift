@@ -212,8 +212,8 @@ else
     TAG="v$VERSION"
 fi
 
-# v0.4.0-rc.1 is a candidate; v0.4.0 is the release. Anything after the version is a
-# prerelease marker, which is Semver's rule and GitHub's: /releases/latest/download/ skips
+# v2026.9.14-rc.1 is a candidate; v2026.9.14 is the release. Anything after a hyphen is a
+# prerelease marker, GitHub's rule as much as ours: /releases/latest/download/ skips
 # a prerelease, so a soak build cannot become what the download button serves.
 if [[ "${TAG#v}" == *-* ]]; then
     PRERELEASE=(--prerelease)
