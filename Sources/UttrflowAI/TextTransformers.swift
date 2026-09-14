@@ -28,13 +28,13 @@ public enum TextTransformers {
         return engines
     }
 
-    /// A router over every engine in this build, ordered by the configuration.
+    /// A router over every engine in this build, ordered by the configuration, with short replies left to the rules.
     public static func router(
         configuration: EngineConfiguration = .default, cloudEndpoint: URL? = nil,
         steps: CleaningSteps = .default, spellings: (@Sendable () async -> PhoneticIndex)? = nil
     ) -> TransformerRouter {
         TransformerRouter(
             engines: all(cloudEndpoint: cloudEndpoint, steps: steps, spellings: spellings),
-            configuration: configuration)
+            configuration: configuration, rulesAlone: .shortReplies)
     }
 }

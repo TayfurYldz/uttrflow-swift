@@ -33,6 +33,26 @@ pipeline above knows there is more than one way to be recording.
   line before `monitor.stop()` yielded the release it owes for a hold in progress — the one
   event that keeps a stuck microphone from staying open.
 
+## Changing the activation mode
+
+- `setActivation(_:)` is queued behind every other gesture, like a click, and returns once the
+  new mode is in force. Run beside the queue, it could land while a press was still waiting for
+  the microphone to open, see nothing recording, and let that press finish opening it under rules
+  it was never given.
+- A change to a different mode **finishes** any dictation under way and keeps its words. A
+  recording belongs to the gesture that started it, and after the change that gesture no longer
+  has a way to end: a hold switched to press-to-toggle ignores its release, and a toggle switched
+  to hold-to-talk waits for a hold nobody is making. Left alone, the microphone stays open until a
+  stray press or the cap closes it.
+- Finishing, not cancelling, matches the two other ends nobody pressed a key for: a rebind
+  mid-hold delivers the owed release, which finishes the hold (`Docs/shortcuts.md`), and the cap
+  finishes and keeps the words (`Docs/stuck-recording.md`). Speech from before opening
+  Settings is inserted rather than lost.
+- The change also forgets a modifier press still settling, a pending first tap and hands-free, so
+  a release that arrives after the change opens nothing and the next press starts clean.
+- Setting the mode the controller already has changes nothing, so a settings write that touches
+  another field cannot stop a dictation.
+
 ## A click has no release
 
 Both ways of pretending otherwise were broken. Sending `.pressed` and `.released` together made
