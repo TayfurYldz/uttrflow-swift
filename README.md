@@ -60,7 +60,7 @@
 **In the code:** `UttrflowClipboard` and `Sources/Uttrflow/Panel`. Read
 [`Docs/panel.md`](Docs/panel.md) and [`Docs/clipboard-secrets.md`](Docs/clipboard-secrets.md).
 
-## ⇥ Suggestions: get suggestions at the speed of thought
+## ⇥ Suggestions: Any tool, get suggestions at the speed of thought
 
 <p align="center">
   <img src="Docs/media/readme-suggestions.png" width="820"
