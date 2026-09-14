@@ -265,7 +265,7 @@ def normalise(text):
     t = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", t)
     t = t.lower().replace("_", " ").replace("%", " percent").replace("/", " slash ")
     t = re.sub(r"(?<=[a-z])\.(?=[a-z])", " dot ", t)
-    t = re.sub(r"(\d)(st|nd|rd|th)\b", r"\1", t)
+    t = re.sub(r"(\d)[snrt][tdh]\b", r"\1", t)  # drops the suffix of an ordinal numeral
     t = re.sub(r"\d[\d,]*(?:[.:]\d+)?", numeral, t)
     t = re.sub(r"[^\w\s]", " ", t.replace("'", "").replace("’", ""))
     return [ORDINALS.get(w, w) for w in t.split()]
