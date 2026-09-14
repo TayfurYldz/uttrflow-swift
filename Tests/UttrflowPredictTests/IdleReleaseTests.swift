@@ -84,7 +84,6 @@ struct IdleReleaseTests {
         try await model.prepare(onProgress: { _ in })
         await model.releaseIfIdle(at: .now + .seconds(700))
         #expect(await model.isReady == false)
-        #expect(await model.isReady == false)
         await model.pendingWork?.value
         #expect(await model.isReady)
         #expect(await inner.steps == ["load", "release", "load"])

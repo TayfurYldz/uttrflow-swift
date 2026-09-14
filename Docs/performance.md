@@ -51,7 +51,7 @@ has to be.
 | idle: menu bar only, windows closed, suggestions off | ~0% of a core; at most 2 timer wakeups a second from the app's own code | clipboard poll 4.8/s (#375) |
 | idle with tab-to-complete on | nothing beyond the line above once 12 s have passed with no keystroke, click or switch and nothing drawn | a 1 Hz tick for ever, each one an Accessibility read of the frontmost app (#374) |
 | typing, suggestions on | the tap callback does one atomic load; a turn per keystroke, coalesced to one running and one waiting; a model pass only after 120 ms of quiet, cancelled by the next key | as budgeted |
-| a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | user-initiated, ungated (#376); 0.65 processor-seconds per pass here, so ≈ 1.1 on M1 |
+| a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | user-initiated, ungated (#376); 0.17 processor-seconds per pass here since #427, so ≈ 0.3 on M1 |
 | dictation | speech ≤ 0.1 processor-seconds per second of audio on M1; finished within 0.5× the audio's length on M1 | 0.04 here, which scales to ≈ 0.07; 0.20× wall clock here on a loaded machine |
 | animation | none continuous while nobody can see it; none decorative under Reduce Motion, Low Power Mode or serious thermal pressure | #359, #377 |
 
@@ -61,7 +61,10 @@ other builds, so wall-clock figures are pessimistic and processor-seconds are th
 - **Model pass.** `uttrflow-bakeoff complete --fixtures --model gemma3`, release build, under
   `/usr/bin/time -l`: 30 fixtures cost 22.96 processor-seconds and one cost 4.09, so each pass
   past the first is 0.65 processor-seconds and 11.3 G instructions, p50 784 ms. A debug build
-  costs twice that (1.28 s), which is why this row is measured in release.
+  costs twice that (1.28 s), which is why this row is measured in release. Re-measured for #427 on
+  14 September over all 1,154 fixtures, back to back at a load average up to 240: 1,086
+  processor-seconds with the prompt tokenised whole, 192 with `PromptTokens`, so 0.94 against 0.17 a
+  pass, p50 1,166 ms against 207 ms, and every fixture's lines identical.
 - **Speech.** `uttrflow-bakeoff profile --transcribe-only`, release: 0.15, 0.51 and 2.19
   processor-seconds for 3.4, 13.9 and 58.1 seconds of speech — 0.04 per second of audio, 0.27 G
   instructions per second of audio.
@@ -333,6 +336,48 @@ One thing the same run showed by accident: with the compile cache warm, loading 
 costs **5.68 processor-seconds at 0.98 cores** — a full core for six seconds. Cold it was
 0.15 cores for 148 seconds. The two are not the same event and averaging them would
 describe neither.
+
+### A suggestion pass's tokenizer
+
+A suggestion pass spent more processor time turning its prompt into tokens than running the
+model (#427). `sample` of a Release `uttrflow-bakeoff gpu-memory` run put 35% of all on-CPU
+samples in ICU's `RegexMatcher`, under `PreTrainedTokenizer.applyChatTemplate → encode →
+String.split(by:)`. The tokenizer splits text on its added tokens with one alternation regex
+before anything else, Gemma 3 declares 6,415 of them, and every pass rendered and tokenised the
+whole prompt — the fixed instructions, the screen, the person's lines — to add one typed
+character. Rendering the template itself, and building the message, are each under 1%.
+
+`PromptTokens` tokenises the template's frame once, when the model loads, and each line of the
+message once, keyed by its exact bytes; a pass pays only for the lines that changed. It is
+token-identical to the whole template because every break it cuts at is a hard boundary for
+this tokenizer: `\n` is an added token, every added token holding a line break is only line
+breaks, none swallows whitespace, and the frame's edges are added tokens no first or last
+character of the message can join. It checks each of those at load against `tokenizer.json`
+and probe messages, and a message it cannot vouch for is tokenised whole. `PromptTokensTests`
+holds it to the whole template over 3,000 random messages of boundary characters with the cache
+shared between them, and over Gemma 3's own tokenizer where it is on disk
+(`UTTRFLOW_TOKENIZER_PROOF=300`, run for #427, all identical). The keys are bytes because Swift
+calls the two spellings of "é" one string and the tokenizer does not; that test fails on a
+`String` key.
+
+Measured 14 September 2026 on the M5 Pro at a load average of 45–240 from other builds, so the
+processor figures are the ones to trust. One Release binary, the cache switched off by an
+environment variable that was never committed, 100 passes each, every fourth cancelled, one
+score a pass, two rounds:
+
+| harness | processor a pass, before → after | tokenising the prompt a pass | pass p50 / p95 |
+|---|---|---|---|
+| `gpu-memory --typing`: one reply typed a character a pass under one screen | 1.54 s, 1.93 s → 0.31 s, 0.32 s | 1,111 ms, 1,494 ms → 7 ms, 6 ms | 2,244 / 2,565 ms → 425 / 828 ms |
+| `gpu-memory`: a different screen every pass | 0.96 s, 0.92 s → 0.40 s, 0.38 s | 587 ms, 615 ms → 50 ms, 54 ms | 1,122 / 1,578 ms → 550 / 1,128 ms |
+
+Per 100 keystroke-turns that is about 150–190 processor-seconds before and 31 after. All 75
+completed passes of every run returned the same lines with the cache on and off, and the same
+as a build of `main` before the change.
+
+What is left is the score: `judgedTokens` tokenises the candidate twice, about 100 ms a pass
+through the same regex, and that is now the largest tokenizer cost. The regex is the dependency's;
+upstream it is huggingface/swift-transformers#383, with a fix open as #386, and nothing here
+patches or bumps it.
 
 ### The processor time that is not the app's
 
@@ -983,6 +1028,7 @@ make bakeoff ARGS="profile --app dist/Uttrflow.app"   # include the bundle in th
 make bakeoff ARGS="profile --dictations 30"          # a longer leak check
 make bakeoff ARGS="profile --transcribe-only"        # transcription without the clean-up pass
 make bakeoff ARGS="gpu-memory --passes 40"           # the suggestion model's GPU memory, pass by pass
+make bakeoff ARGS="gpu-memory --typing --show"       # processor a pass while a reply is typed, and every line
 ```
 
 The speech model must already be installed (`uttrflow-dev models install`). Audio is
