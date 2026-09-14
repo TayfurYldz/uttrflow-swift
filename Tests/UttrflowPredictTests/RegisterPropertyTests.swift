@@ -23,12 +23,17 @@ struct RegisterCase: Sendable, CustomTestStringConvertible {
     init(seed: Int) {
         var random = Seeded(seed: seed)
         self.seed = seed
+        let speakers =
+            random.chance(0.4)
+            ? Array(["Priya", "Me", "Neha (PM)"].prefix(Int.random(in: 1...3, using: &random))) : []
         let screen: String? =
             random.chance(0.25)
             ? nil
             : (0..<Int.random(in: 0...12, using: &random)).map { _ in
                 random.chance(0.15)
-                    ? random.pick(["", "   ", "\t"]) : RegisterCase.line(&random, long: random.chance(0.3))
+                    ? random.pick(["", "   ", "\t"])
+                    : (speakers.isEmpty ? "" : random.pick(speakers) + ": ")
+                        + RegisterCase.line(&random, long: random.chance(0.3))
             }.joined(separator: random.pick(["\n", "\r\n"]))
         let own = (0..<Int.random(in: 0...15, using: &random)).map { _ in
             RegisterCase.line(&random, long: random.chance(0.2))
@@ -119,15 +124,21 @@ struct RegisterPropertyTests {
     }
 
     @Test(
-        "A screen is a conversation when it has enough lines and most of them are short.", arguments: samples)
+        "A screen is a conversation when it has enough short lines and at least two people take turns on it.",
+        arguments: samples)
     func conversationsAreShortTurns(sample: RegisterCase) {
         let register = Register.infer(from: sample.situation, typed: sample.typed)
         let lines = (sample.situation.surroundings ?? "").split(whereSeparator: \.isNewline).filter {
             $0.contains { !$0.isWhitespace }
         }
         let short = lines.filter { $0.count < Register.conversationLineLength }.count
+        let names = lines.compactMap { line in line.range(of: ": ").map { String(line[..<$0.lowerBound]) } }
+        let turns =
+            names.count >= Register.conversationLines && Set(names).count >= 2
+            && Set(names).count < names.count
         let expected =
             lines.count >= Register.conversationLines && Double(short) / Double(max(lines.count, 1)) >= 0.6
+            && turns
         #expect(register.isConversational == expected)
     }
 
