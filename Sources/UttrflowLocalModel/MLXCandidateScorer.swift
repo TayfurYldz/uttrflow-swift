@@ -90,9 +90,9 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         bufferCache.clear()
     }
 
-    /// Builds the model's modules and reads its weights, which is the one path that quantises.
+    /// Builds the model's modules from placeholders and reads its weights, so even the first load leaves no quantize graph.
     static func buildContainer(from directory: URL) async throws -> ModelContainer {
-        try await loadModelContainer(from: directory, using: #huggingFaceTokenizerLoader())
+        try await QuantizedLoad.container(from: directory, using: #huggingFaceTokenizerLoader())
     }
 
     /// Drops everything read from the weights.

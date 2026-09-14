@@ -854,7 +854,7 @@ The GPU buffers are not part of it. It is CPU bookkeeping, paid on every call to
 so it grew through a day of ordinary use.
 
 **Reloads no longer quantise.** `ReloadableWeights` builds the modules through
-`loadModelContainer` on the first load only. A release keeps the modules and swaps every
+`QuantizedLoad` on the first load only. A release keeps the modules and swaps every
 weight for an unevaluated `zeros` placeholder of the same shape, which holds no buffer; a
 reload reads the safetensors, runs the model's `sanitize`, and assigns them with
 `update(parameters:verify: .all)`, so every shape is still checked. Nothing on that path makes a
@@ -880,11 +880,31 @@ release crept up with them. After, the count stays at what the first load leaves
 about a second faster because no module is built, and the same fixed prompt gives the same answer
 after every reload. MLX's active memory after a release is still 0 MB (`gpu-memory --release`).
 
+**The first load does not quantise either.** `QuantizedLoad` creates the model from the same
+type registry, reads the safetensors headers, and swaps each linear layer that the snapshot stores
+with scales in a floating type, and that the configuration quantizes, for a `QuantizedLinear` of
+unevaluated zeros before `loadWeights` runs; any other layer is left to the library, so the quantiser
+skips it and the stored weights replace the zeros with the same shape checks. It then evaluates
+MLX's global random key, which every random initial weight split lazily into a chain of siblings.
+Only the embedding still goes through the quantiser, because `QuantizedEmbedding` has no
+initializer that takes arrays. The clean-up model loads through the same path. Measured on top of
+the table above, with the same command:
+
+| | leaks | leaked bytes | footprint after the last release |
+|---|---|---|---|
+| reloadable weights alone, first load | 10,808 | 2.06 MB | 364 MB |
+| reloadable weights alone, 5 reloads | 10,950 | 2.09 MB | 365 MB |
+| with `QuantizedLoad`, first load | 75 | 14 KB | 339 MB |
+| with `QuantizedLoad`, 5 reloads | 75 | 14 KB | 340 MB |
+
+The same fixed prompt gives the same answer throughout.
+
 Other ways round it, and why they were not taken. Evaluating the quantised arrays before they are
 replaced would break the cycle, but `loadWeights` gives no moment between the two, and evaluating
 them would quantise the randomly initialised full-precision weights — gigabytes of work thrown
 away. No loader option skips the quantiser: `LLMModelFactory` always passes the configuration's
-quantisation to `loadWeights`, and without it the stored `scales` fail verification. Releasing
+quantisation to `loadWeights`, and without it the stored `scales` fail verification, which is why
+`QuantizedLoad` builds the quantized layers itself instead. Releasing
 less often would only slow the growth, and would hold 3 GB longer on the small Macs the idle
 release exists for.
 
