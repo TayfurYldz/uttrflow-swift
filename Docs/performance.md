@@ -238,8 +238,9 @@ reclaims on its own.
 The suggestion model is what the budget is about. On an 8 GB Mac its 3 GB is close to half of
 all memory, which is why nothing loads it for somebody who never asked, and why turning the
 feature off gives it back. `AppDelegate` releases it when the switch goes off, after any load
-still running has landed, and `MLXCandidateScorer.release()` drops the weights, the warmed
-instructions and the vocabulary and empties MLX's cache. Measured with
+still running has landed, and `MLXCandidateScorer.release()` swaps out the weights (keeping the modules
+and tokenizer, see "Reloads no longer quantise" below), drops the warmed instructions and the
+vocabulary, and empties MLX's cache. Measured with
 `uttrflow-bakeoff gpu-memory --release`:
 
 | | MLX active | process footprint |
@@ -760,7 +761,7 @@ with time: 3,420 leaked nodes and 583 KB at one minute, the same at 92 minutes.
 | Group | Size | Owner | State |
 |---|---|---|---|
 | `OnboardingFlow` cycle | 2.4 KB per onboarding controller | ours | fixed |
-| `mlx::core::array::ArrayDesc` cycles | 0.4–1.7 MB per model load | MLX | upstream |
+| `mlx::core::array::ArrayDesc` cycles | 0.4–1.7 MB on the first load only | MLX | reloads fixed here, first load upstream |
 | `NSXPCConnection` cycles (AppIntents daemon) | 4.7 KB | the system | not ours |
 
 **The onboarding cycle.** `OnboardingModel` set `flow.onChange` to a closure that captured
@@ -775,14 +776,49 @@ Quantizing makes three sibling arrays (weights, scales, biases) that hold each o
 `loadWeights` then replaces them, still unevaluated, with the stored weights through
 `model.update(parameters:)`, which assigns through `mlx_array_set` → `array::operator=`. In
 MLX up to v0.32.2 assignment skips the check in `~array` that breaks a sibling cycle, so the
-three stay alive holding each other. Nothing in this app keeps them: the scorer calls
-`loadModelContainer` once and never touches the quantizer. The fix is upstream in MLX
-(pull request 4453, "Break the sibling cycle when an array is released by assignment"),
-merged after v0.32.2 and not yet in any mlx-swift release; mlx-swift 0.31.6 and mlx-swift-lm
-3.31.4, which this app pins, are the latest releases of both.
+three stay alive holding each other. The fix is upstream in MLX (pull request 4453, "Break the
+sibling cycle when an array is released by assignment"), merged after v0.32.2 and not yet in
+any mlx-swift release or branch; mlx-swift 0.31.6 and mlx-swift-lm 3.31.4, which this app
+pins, are the latest releases of both.
 
-The GPU buffers are not part of it. It is CPU bookkeeping, paid once per model load, so it
-only matters to a change that reloads the model.
+The GPU buffers are not part of it. It is CPU bookkeeping, paid on every call to
+`loadWeights` — and the idle release reloads the suggestion model after every idle window,
+so it grew through a day of ordinary use.
+
+**Reloads no longer quantise.** `ReloadableWeights` builds the modules through
+`loadModelContainer` on the first load only. A release keeps the modules and swaps every
+weight for an unevaluated `zeros` placeholder of the same shape, which holds no buffer; a
+reload reads the safetensors, runs the model's `sanitize`, and assigns them with
+`update(parameters:verify: .all)`, so every shape is still checked. Nothing on that path makes a
+sibling array, so nothing is left to leak. A release waits for any pass still using the model,
+and a pass stops its decode before it ends, so no step reads a weight that was swapped out.
+
+`uttrflow-bakeoff reload-leaks` loads Gemma 3 4B, then releases and reloads it in one process,
+running `leaks` on itself at 1, 5 and 20 reloads (Release build, 48 GB Apple silicon):
+
+| | leaks | leaked bytes | median reload | footprint after the last release |
+|---|---|---|---|---|
+| before, first load | 12,181 | 2.35 MB | 5.8 s (first) | — |
+| before, 1 reload | 18,100 | 3.43 MB | 4.95 s | 347 MB |
+| before, 5 reloads | 47,656 | 9.01 MB | 4.74 s | 390 MB |
+| before, 20 reloads | 144,034 | 27.14 MB | 4.96 s | 640 MB |
+| after, first load | 3,609 | 0.70 MB | 4.9 s (first) | — |
+| after, 1 reload | 3,609 | 0.70 MB | 3.75 s | 337 MB |
+| after, 5 reloads | 3,609 | 0.70 MB | 3.91 s | 341 MB |
+| after, 20 reloads | 3,608 | 0.70 MB | 3.93 s | 343 MB |
+
+Before, each reload added about 6,400–7,400 leaks and 1.2–1.4 MB, and the footprint left after a
+release crept up with them. After, the count stays at what the first load leaves, a reload is
+about a second faster because no module is built, and the same fixed prompt gives the same answer
+after every reload. MLX's active memory after a release is still 0 MB (`gpu-memory --release`).
+
+Other ways round it, and why they were not taken. Evaluating the quantised arrays before they are
+replaced would break the cycle, but `loadWeights` gives no moment between the two, and evaluating
+them would quantise the randomly initialised full-precision weights — gigabytes of work thrown
+away. No loader option skips the quantiser: `LLMModelFactory` always passes the configuration's
+quantisation to `loadWeights`, and without it the stored `scales` fail verification. Releasing
+less often would only slow the growth, and would hold 3 GB longer on the small Macs the idle
+release exists for.
 
 **The step after visiting every page.** The 125-minute reading rose to 5,224 nodes and
 914 KB. The whole rise was one more `ArrayDesc` cycle of 311 KB plus a few nodes on existing
@@ -1219,6 +1255,7 @@ make bakeoff ARGS="profile --dictations 30"          # a longer leak check
 make bakeoff ARGS="profile --transcribe-only"        # transcription without the clean-up pass
 make bakeoff ARGS="gpu-memory --passes 40"           # the suggestion model's GPU memory, pass by pass
 make bakeoff ARGS="gpu-memory --typing --show"       # processor a pass while a reply is typed, and every line
+make bakeoff ARGS="reload-leaks --checkpoints 1,5,20" # leaks, footprint and time across reloads in one process
 ```
 
 The speech model must already be installed (`uttrflow-dev models install`). Audio is
