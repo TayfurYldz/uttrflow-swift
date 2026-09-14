@@ -292,16 +292,16 @@ struct SuggestionPresentationTests {
         #expect(SuggestionPresentation(.minimised, appearance: opaque).style == .dot)
     }
 
-    @Test("Reduce Motion is the whole of whether the surface animates")
-    func reduceMotionStopsEverythingMoving() {
-        #expect(SuggestionPresentation(.certain("Sydney")).animates)
-        #expect(
-            !SuggestionPresentation(
-                .certain("Sydney"), appearance: SuggestionAppearance(reducesMotion: true)
-            ).animates)
+    @Test("The room after the caret is carried to the view, and a width that is no width is none")
+    func carriesTheMaximumWidth() {
+        #expect(SuggestionPresentation(.certain("Sydney")).maximumWidth == nil)
+        #expect(SuggestionPresentation(.certain("Sydney"), maximumWidth: 180).maximumWidth == 180)
+        for nonsense: CGFloat in [0, -4, .nan, .infinity] {
+            #expect(SuggestionPresentation(.certain("Sydney"), maximumWidth: nonsense).maximumWidth == nil)
+        }
     }
 
-    @Test("Reduce Motion does not change what is drawn, only whether it moves")
+    @Test("Reduce Motion does not change what is drawn")
     func reduceMotionLeavesTheStyleAlone() {
         let still = SuggestionPresentation(
             .certain("Sydney"), appearance: SuggestionAppearance(reducesMotion: true))
