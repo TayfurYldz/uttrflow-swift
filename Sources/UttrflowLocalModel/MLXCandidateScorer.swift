@@ -54,7 +54,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         guard container == nil else { return }
         let directory = try await model.weightsDirectory(
             cache: cache, downloader: { #hubDownloader() }, onProgress: onProgress)
-        container = try await loadModelContainer(from: directory, using: #huggingFaceTokenizerLoader())
+        container = try await QuantizedLoad.container(from: directory, using: #huggingFaceTokenizerLoader())
         warm = await warmInstructions()
         prompt = await promptTokens(
             addedTokens: AddedToken.read(fromTokenizerFile: directory.appending(path: "tokenizer.json")))

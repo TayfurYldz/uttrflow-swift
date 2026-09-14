@@ -76,8 +76,22 @@ enum CachedSnapshot {
         return sum
     }
 
+    /// A safetensors file's header, the name of every tensor with its type, shape and offsets.
+    static func header(of file: URL) -> [String: Any]? {
+        parsed(file)?.tensors
+    }
+
     /// A safetensors file's length when it matches its own header, which a cut-off or corrupt file never does.
     static func wholeSize(of file: URL) -> UInt64? {
+        guard let (tensors, length, headerLength) = parsed(file),
+            tile(tensors, payload: length - 8 - headerLength)
+        else { return nil }
+        return length
+    }
+
+    /// The header of a safetensors file with the file's length and the header's, or nil when the header cannot be read.
+    private static func parsed(_ file: URL) -> (tensors: [String: Any], length: UInt64, headerLength: UInt64)?
+    {
         guard let length = size(of: file), length > 8,
             let handle = try? FileHandle(forReadingFrom: file.resolvingSymlinksInPath())
         else { return nil }
@@ -89,10 +103,9 @@ enum CachedSnapshot {
         // Compared against `length - 8`, which `length > 8` keeps from wrapping, so no sum can overflow.
         guard headerLength > 0, headerLength <= largestHeader, headerLength <= length - 8,
             let header = try? handle.read(upToCount: Int(headerLength)), header.count == Int(headerLength),
-            let tensors = try? JSONSerialization.jsonObject(with: header) as? [String: Any],
-            tile(tensors, payload: length - 8 - headerLength)
+            let tensors = try? JSONSerialization.jsonObject(with: header) as? [String: Any]
         else { return nil }
-        return length
+        return (tensors, length, headerLength)
     }
 
     /// Whether the header's tensors cover exactly `payload` bytes, end to end, each as long as its shape says.
