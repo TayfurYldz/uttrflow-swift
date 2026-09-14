@@ -49,13 +49,27 @@ struct GPUMemory: AsyncParsableCommand {
         print("loaded                    \(Self.row(GPUBufferCache.reading))")
         var times: [Int] = []
         var processor: [Int] = []
+        var readings: [BudgetReading] = []
         for pass in 1...passes {
             let cancelled = cancelEvery > 0 && pass % cancelEvery == 0
             let before = Self.processorMilliseconds()
-            let (elapsed, lines) = await Self.measure(
-                pass: pass, cancelled: cancelled, typing: typing, with: scorer)
+            let ((elapsed, lines), peak) = await PeakMemory.observed {
+                await Self.measure(pass: pass, cancelled: cancelled, typing: typing, with: scorer)
+            }
             let spent = Self.processorMilliseconds() - before
             processor.append(spent)
+            if let peak {
+                readings.append(
+                    .init(
+                        state: .suggestionsPassPeak, label: "pass \(pass)",
+                        footprintBytes: peak.footprintBytes))
+            }
+            if let settled = MemoryFootprint.current() {
+                readings.append(
+                    .init(
+                        state: .suggestionsBetweenPasses, label: "after pass \(pass)", footprintBytes: settled
+                    ))
+            }
             if !cancelled { times.append(elapsed) }
             let kind = cancelled ? "cancelled" : "complete "
             let label =
@@ -69,6 +83,10 @@ struct GPUMemory: AsyncParsableCommand {
             await scorer.release()
             try? await Task.sleep(for: .seconds(1))
             print("released                  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())")
+            if let released = MemoryFootprint.current() {
+                readings.append(
+                    .init(state: .afterRelease, label: "a second after release", footprintBytes: released))
+            }
             let reloading = ContinuousClock.now
             try await scorer.prepare()
             let reload = Int((ContinuousClock.now - reloading) / .milliseconds(1))
@@ -77,13 +95,15 @@ struct GPUMemory: AsyncParsableCommand {
             )
         }
         let sorted = times.sorted()
-        guard !sorted.isEmpty else { return }
-        print(
-            "complete passes: median \(sorted[sorted.count / 2]) ms, p95 \(sorted[sorted.count * 95 / 100]) ms, mean \(sorted.reduce(0, +) / sorted.count) ms"
-        )
-        print(
-            "processor: \(processor.reduce(0, +) / processor.count) ms a pass over all \(processor.count) passes"
-        )
+        if !sorted.isEmpty {
+            print(
+                "complete passes: median \(sorted[sorted.count / 2]) ms, p95 \(sorted[sorted.count * 95 / 100]) ms, mean \(sorted.reduce(0, +) / sorted.count) ms"
+            )
+            print(
+                "processor: \(processor.reduce(0, +) / processor.count) ms a pass over all \(processor.count) passes"
+            )
+        }
+        try BudgetVerdict.enforce(readings)
     }
 
     /// Processor time this process has spent on every thread, in milliseconds.

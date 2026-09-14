@@ -62,6 +62,16 @@ pii-audit: ## Prove no personal data is in the tree. Needs no build.
 log-audit: ## Prove no log message carries text a person typed, read or said. Needs no build.
 	@python3 Scripts/log_privacy_audit.py
 
+.PHONY: perf-budget
+perf-budget: ## Prove the source keeps to the energy and memory budget, and that each check still bites. No build.
+	@python3 Scripts/perf_budget_audit.py --self-test
+
+# Needs the speech model and the suggestion model on disk, so it runs on a Mac rather than in CI.
+.PHONY: perf-budget-models
+perf-budget-models: ## Fail when the model harness reads memory over the budget. Needs both models installed.
+	$(MAKE) bakeoff ARGS="gpu-memory --passes 12 --release"
+	$(MAKE) bakeoff ARGS="profile --dictations 10"
+
 .PHONY: pasteboard-audit
 pasteboard-audit: ## Prove only the clipboard adapters touch NSPasteboard. Needs no build.
 	./Scripts/pasteboard_audit.sh
@@ -92,7 +102,7 @@ disclosure-history: ## Scan every commit on every ref. Run before a repo goes pu
 # whose failure cannot be fixed after the fact. A competitor's name in a commit is
 # published the moment the commit is, and no later edit reaches a clone or a cache.
 .PHONY: verify
-verify: pii-audit disclosure-audit docs-audit comment-audit match-audit log-audit pasteboard-audit lint build coverage offline-audit ## The whole gate: PII, disclosure, docs, comments, word matches, log privacy, clipboard, lint, build, tests, coverage floor, offline audit.
+verify: pii-audit disclosure-audit docs-audit comment-audit match-audit log-audit pasteboard-audit perf-budget lint build coverage offline-audit ## The whole gate: PII, disclosure, docs, comments, word matches, log privacy, clipboard, energy and memory budget, lint, build, tests, coverage floor, offline audit.
 
 # Hooks are not cloned — .git/hooks is local to a checkout — so this points git at a
 # directory that is. One command per clone, and the gate cannot be forgotten after that.

@@ -94,6 +94,7 @@ struct Profile: AsyncParsableCommand {
 
         clearProgress()
         ProfilePrinter(report: report, model: model, includesCleanup: !transcribeOnly).emit()
+        try BudgetVerdict.enforce(ResourceBudget.readings(of: report.timeline))
     }
 
     // MARK: Progress
