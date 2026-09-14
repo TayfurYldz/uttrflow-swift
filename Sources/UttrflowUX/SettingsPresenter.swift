@@ -284,8 +284,8 @@ public enum SettingsPresenter {
                 symbolName: "globe",
                 message:
                     "Mixing English and Hindi in one sentence is expected and handled. Tidying up "
-                    + "is strongest in English today — Hindi gets punctuation and spacing, not "
-                    + "rewriting."))
+                    + "is strongest in English today. Hindi is written in Latin letters the way people "
+                    + "type it — never Devanagari, never translated."))
     }
 
     // MARK: - Dictation

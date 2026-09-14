@@ -521,15 +521,17 @@ public actor DictationPipeline {
             from: appContext ?? AppContext(), overrides: runningOverrides)
         let joined = PieceJoiner.join(pieces, under: .standard(for: joining.destination))
         let whole = await finishMessage(joined, going: joining, seeing: appContext ?? AppContext())
+        // Dictation writes Latin letters only, whichever engine tidied the words or none did. See `Docs/latin-output.md`.
+        let written = LatinScript.enforced(whole.cleaned.text)
 
         // Inserting a blank would delete the user's selection, so it is refused like silence.
-        guard !whole.cleaned.text.isBlank else {
+        guard !written.isBlank else {
             await fail(DictationFailure(SpeechEngineError.nothingHeard))
             return
         }
 
         // Snippets after the tidier, whose punctuation is what stops a trigger crossing a sentence.
-        let expanded = await expand(whole.cleaned.text)
+        let expanded = await expand(written)
         guard !wasCancelled(mine) else { return }
 
         let changes = AppliedChanges(

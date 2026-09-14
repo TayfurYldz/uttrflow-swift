@@ -1202,7 +1202,8 @@ What the rows say, read against the clips rather than the percentages:
 - **Hinglish loses to the alphabet, not to the words.** The recogniser writes Hinglish in
   Devanagari, "deploy" and "issue" included, so a Latin-alphabet reference scores it as nearly all
   wrong while the words are right. The tidier romanises it when Apple's model accepts the passage,
-  which takes 170% to 63%; it declines most Hindi passages outright, which is issue 445.
+  which takes 170% to 63%; it declined most Hindi passages outright (issue 445), which was measured
+  before the rules romanised too (`Docs/latin-output.md`).
 - **Numbers and names are the English errors.** "4,250 dollars and 75 cents" is written "$4,250.75"
   (fair, but counted); "Jaxvale" becomes "Jack's Vale". Code identifiers are written as the
   recogniser chose to join them; "src" is heard as "source".
