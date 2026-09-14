@@ -128,7 +128,7 @@ jobs:
           {
             ./Scripts/changelog.py "$VERSION"
             printf '\n---\n\n- Download: https://uttrflow.com/download\n'
-            printf '- Every build: https://github.com/uttrflow/releases/releases\n'
+            printf -- '- Every build: https://github.com/uttrflow/releases/releases\n'
           } > notes.md
           args=(--repo "$GITHUB_REPOSITORY" --title "Uttrflow $VERSION" --notes-file notes.md)
           if [ "$PRERELEASE" = "true" ]; then
