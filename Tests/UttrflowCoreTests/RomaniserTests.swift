@@ -21,7 +21,8 @@ struct RomaniserTests {
         arguments: [
             ("करना", "karna"), ("समझना", "samajhna"), ("निकलने", "nikalne"), ("भागदौड़", "bhaagdaud"),
             ("सड़क", "sadak"), ("कृपया", "kripya"), ("अनन्या", "ananya"),
-            ("विक्रम", "vikram"), ("दिल्ली", "dilli"), ("घर", "ghar"),
+            ("विक्रम", "vikram"), ("अगस्त", "agast"), ("दोस्त", "dost"), ("मित्र", "mitra"), ("दिल्ली", "dilli"),
+            ("घर", "ghar"),
         ])
     func silentVowels(devanagari: String, typed: String) {
         #expect(Romaniser.romanised(devanagari) == typed)

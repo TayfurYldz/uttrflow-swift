@@ -36,6 +36,8 @@ chat, not the way a scholar transliterates it. It has no diacritics and never pr
   syllable (आज aaj, किताब kitaab) and "a" at the end of a word or before another vowel
   (करना karna, जाएगा jayega). ई and ऊ are "ee" and "oo" in a closed syllable or a first
   syllable before "a" (चीज़ cheez, पूरा poora), otherwise "i" and "u" (लीजिए lijiye, दूँगा dunga).
+- **A final cluster drops its vowel too** (अगस्त agast, दोस्त dost) unless it ends in य, र or व
+  (मित्र mitra).
 - **Nasalisation is "n"**, "ein" for a final ें (में mein), and nothing before न or म (मैंने maine).
 - **An unwritten vowel before a closing ह is "e"**: पहले pehle, कह keh.
 - **Clusters people write as one sound**: च्छ cch (अच्छा accha), क्ष ksh, ज्ञ gy. व is "w" except
@@ -55,7 +57,7 @@ is (`TextNormaliser.standard`):
 | | words | characters |
 |---|---|---|
 | ICU letter by letter, stripped of diacritics | 42.7% | 84.5% |
-| `Romaniser`, syllable rules alone (no table) | 91.4% | 98.2% |
+| `Romaniser`, syllable rules alone (no table) | 91.9% | 98.3% |
 | `Romaniser` | **97.9%** | **99.4%** |
 
 The rules and the table were written with these passages in view, so these are upper bounds:
