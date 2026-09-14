@@ -1,7 +1,7 @@
 # Releasing Uttrflow
 
-Everything happens on a Mac somebody is sitting at. There is no build server, and adding
-one is not a pending task — see [CI, and why the gate is still local](#ci-and-why-the-gate-is-still-local).
+A release can be cut by hand on a Mac, as this page describes, or by pushing a tag through
+the workflow documented in [`RELEASING.md`](../RELEASING.md).
 
 ## The version
 
@@ -143,8 +143,9 @@ inside is ever looked at. Both, in that order.
 
 ## Publishing
 
-`Scripts/publish.sh` uses the `gh` login already on this Mac. Nothing is stored in a
-secret anywhere, because nothing needs to leave the machine that has it.
+By hand, `Scripts/publish.sh` uses this Mac's `gh` login and the signing key in its
+keychain. In the workflow, the same script receives `RELEASES_TOKEN` and
+`SPARKLE_PRIVATE_KEY` from repository secrets.
 
 It reads the version and the notarisation state **out of the image** rather than taking
 them as arguments, so the tag cannot disagree with the file it names. It refuses when
@@ -169,9 +170,9 @@ does not ask GitHub, for two reasons in `internal/api/updates.go`: the app talks
 host, and a check every six hours from every install is a heartbeat nobody else should
 receive.
 
-**The private key exists in one place: this Mac's login keychain**, as
-"Private key for signing Sparkle updates". It is not in the repository and not in any
-backup this project makes. Losing it does not break installed copies — it means no
+**The private key exists in the release Mac's login keychain and, once added, in the
+repository's secrets**, as "Private key for signing Sparkle updates". Losing it does not
+break installed copies — it means no
 future release can be signed for them, and every one of them has to be replaced by hand,
 because the public half is compiled into each build. Export it with `generate_keys -x`
 before this Mac is ever wiped.
@@ -182,8 +183,8 @@ check 4a: a feed with nothing to verify against installs whatever it is handed.
 ## Where downloads live
 
 The public repository **[uttrflow/releases](https://github.com/uttrflow/releases)**. It
-holds disk images and `latest.json` and no source code. The source repositories are
-private and stay that way; a download link has to be public, so the two are separated.
+holds disk images and `latest.json` and no source code. Downloads stay separate because a
+second copy of either is a second answer to which build a version is.
 
 One repository serves every platform. A release is a version of the *product*, not of a
 build, and splitting per platform would let `1.2.3` exist for macOS and not for Windows
