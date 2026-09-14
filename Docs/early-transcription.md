@@ -165,8 +165,8 @@ How each piece gets its language follows the Languages setting, `ListeningLangua
   is everybody's default, and pinning it would end Hindi dictation for anyone who never opened
   Settings.
 
-Whatever is ticked, the output is written in Latin letters (`Docs/latin-output.md`): the
-setting steers what recognition listens for, never the script.
+Whatever is ticked, dictation is written in Latin letters: the setting steers what
+recognition listens for, never the script.
 
 ### What cancelling means
 
