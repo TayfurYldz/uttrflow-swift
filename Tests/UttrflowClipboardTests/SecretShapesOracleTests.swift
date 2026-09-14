@@ -45,7 +45,7 @@ struct SecretShapesOracleTests {
         "let x = 1",
     ]
 
-    private static func randomText(_ random: inout Seeded) -> String {
+    static func randomText(_ random: inout Seeded) -> String {
         var text = ""
         for _ in 0..<Int.random(in: 0...24, using: &random) {
             if random.chance(1.0 / 12),
@@ -60,7 +60,7 @@ struct SecretShapesOracleTests {
     }
 
     /// A planted shape, cut or spliced up to three times, between random text on either side.
-    private static func plantedText(_ random: inout Seeded) -> String {
+    static func plantedText(_ random: inout Seeded) -> String {
         var characters = Array(random.pick(planted))
         for _ in 0..<Int.random(in: 0...3, using: &random) {
             let at = Int.random(in: 0...characters.count, using: &random)
@@ -259,11 +259,19 @@ enum BacktrackingPatterns {
         }
     }
 
+    /// `CardNumberShape.matches` as it read before the runs: the pattern over the whole clip.
+    static func hasCardNumber(_ text: String) -> Bool {
+        text.matches(of: CardNumberShape.candidate).contains { match in
+            CardNumberShape.standsAlone(match.range, in: text)
+                && CardNumberShape.isCardNumber(match.output.0.filter(\.isNumber))
+        }
+    }
+
     /// `SecretShapes.matches` as it read before the readers, with the unchanged rules borrowed from it.
     static func matches(_ text: String) -> Bool {
         text.contains("-----BEGIN") || hasJSONWebToken(text) || hasCredentialledURL(text)
             || text.firstMatch(of: SecretShapes.vendorKey) != nil || hasNamedSecret(text)
-            || CardNumberShape.matches(text)
+            || hasCardNumber(text)
             || SecretShapes.hasHighEntropyToken(text)
     }
 }

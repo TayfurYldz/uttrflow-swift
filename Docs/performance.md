@@ -53,6 +53,7 @@ has to be.
 | typing, suggestions on | the tap callback does one atomic load; a turn per keystroke, coalesced to one running and one waiting; a model pass only after 120 ms of quiet, cancelled by the next key | as budgeted |
 | a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | user-initiated, ungated (#376); 0.17 processor-seconds per pass here since #427, so ≈ 0.3 on M1 |
 | dictation | speech ≤ 0.1 processor-seconds per second of audio on M1; finished within 0.5× the audio's length on M1 | 0.04 here, which scales to ≈ 0.07; 0.20× wall clock here on a loaded machine |
+| a copy | classified at utility priority, off the main thread; ≤ 0.2 processor-seconds for a 2 MB clip on M1 | 0.085 here for the costliest 2 MB clip measured, ≈ 0.17 on M1 (#460) |
 | animation | none continuous while nobody can see it; none decorative under Reduce Motion, Low Power Mode or serious thermal pressure | #359, #377 |
 
 How the rows were measured, on 13 September 2026, on a machine at a load average of 50–180 from
@@ -72,6 +73,8 @@ other builds, so wall-clock figures are pessimistic and processor-seconds are th
   own wakeups read with `proc_pid_rusage`: 4.8 wakeups a second at 200 ms, 1.7 at 500 ms with a
   100 ms tolerance, 1.0 at 1 s. Processor time is under 0.05% of a core in every case; the
   wakeups are the cost.
+- **A copy.** `ClipKindDetector.kind(of:)` timed in a release build on 14 September over nine
+  kinds of clip at 16 KB to 2 MB; the table and the method are under *Classifying a copy* below.
 - **The tick.** Counted from the code, not measured: one wakeup a second and one cross-process
   Accessibility read, for as long as the feature is on.
 
@@ -676,6 +679,71 @@ therefore runs at 500 ms, with a fifth of that as tolerance, at utility priority
 
 What this gives up: the clipboard holds only its latest contents, so two copies inside one
 interval keep only the second. That window grew from 200 ms to 500 ms.
+
+### Classifying a copy (#460)
+
+Every text copy up to the 2 MB clip bound goes through `ClipKindDetector.kind(of:)`. Where it runs:
+the watcher calls it on its own actor, inside the utility-priority task `AppDelegate` starts, so
+never on the main thread; opening the panel awaits `catchUp`, which classifies a pending copy while
+the panel waits. A clip typed into the panel or kept from a dictation was classified on the main
+actor, and now goes through `ClipKindDetector.classify(_:)`, a detached utility task awaited through
+a continuation so the wait does not raise its priority.
+
+After #443 the reading was linear, and still seconds per copy. Processor time for one
+`kind(of:)` call, release build, one core, M5 Pro, 14 September 2026, before (main at #458) and
+after; an 8 GB M1 Air takes roughly twice as long:
+
+| input | 16 KB | 256 KB | 1 MB | 2 MB |
+|---|---|---|---|---|
+| code | 0.020 → 0.000 s | 0.267 → 0.002 s | 1.034 → 0.007 s | 2.122 → 0.013 s |
+| prose | 0.041 → 0.002 s | 0.656 → 0.006 s | 2.615 → 0.012 s | 5.169 → 0.020 s |
+| minified JavaScript, one line | 0.019 → 0.001 s | 0.300 → 0.004 s | 1.167 → 0.016 s | 2.303 → 0.029 s |
+| base64, 76 columns | 0.027 → 0.007 s | 0.447 → 0.031 s | 1.744 → 0.020 s | 3.533 → 0.057 s |
+| base64, one line | 0.016 → 0.000 s | 0.282 → 0.002 s | 1.104 → 0.015 s | 2.214 → 0.030 s |
+| logs | 0.043 → 0.005 s | 0.700 → 0.026 s | 2.710 → 0.052 s | 5.479 → 0.085 s |
+| CSV | 0.041 → 0.004 s | 0.656 → 0.020 s | 2.602 → 0.024 s | 5.173 → 0.029 s |
+| hex dump | 0.044 → 0.014 s | 0.742 → 0.060 s | 2.902 → 0.065 s | 1.995 → 0.014 s |
+| hex, one line | 0.017 → 0.000 s | 0.261 → 0.002 s | 1.037 → 0.007 s | 2.066 → 0.013 s |
+
+Wall clock matched processor time to within a few percent in every row; the call is single-threaded.
+Before, a megabyte of prose spent 0.69 s in the vendor-key pattern, 0.20 s in the card-number
+pattern and 1.65 s in `CodeShapes`, which read the whole clip with ten patterns and counted every
+signal even after two were found.
+
+What changed:
+
+- **The secret scan still reads every byte**, and answers exactly as before; the vendor-key and
+  card-number patterns are handed a window at each literal prefix or long digit run rather than
+  the clip. See `Docs/clipboard-secrets.md`.
+- **The code-shape signals read a sample of a large clip.** Up to 64 KB a clip is read whole.
+  Above that, `CodeSample` reads its first and last 16 KB and sixteen 2 KB windows spread evenly
+  between, each trimmed to whole lines where it holds a line break. The whole-clip checks that
+  cost nothing (a shebang, an import on the first line, a one-line shell command) still see the
+  whole clip.
+- **Two signals end the count**, cheapest first, and a pattern is skipped when the bytes lack a
+  literal it cannot match without.
+
+`ClipClassifyScalingTests` counts the bytes handed to the code-shape signals and the characters
+handed to the two secret patterns, so the bound is a count rather than a clock: the first stays at
+the sample's size for 256 KB, 1 MB and 2 MB clips, and the second is zero for a clip with no
+prefix and no long digit run. On the code before this change both grow with the clip.
+
+**What sampling gives up, measured.** A differential run kept the whole-clip classifier as the
+oracle over 50,795 clips (460 MB): 20,000 random strings and 10,000 planted secrets from #443's
+set, 18,000 realistic clips up to 32 KB and 2,000 of 32–64 KB (code, prose, minified, base64,
+logs, CSV, hex, Markdown with code blocks), 300 of 64 KB–2 MB, and every planted shape at the
+start, middle and end of 256 KB clips, with secrets and code snippets spliced in at random.
+
+- **The secret verdict differed on none**, at any size.
+- **The kind differed on 32, all above 64 KB, all code becoming text.** Twelve were base64 in
+  76-column lines, which the whole-clip reading called code because somewhere in a quarter of a
+  megabyte a line began `//` and another held `++`. Twenty were prose, logs, CSV or a hex dump
+  with one to three lines of code spliced in between the sampled windows; the whole-clip reading
+  called the whole document code on the strength of those lines.
+- **Below 64 KB nothing differed.** `ClipKindOracleTests` runs 50,000 random, planted and realistic
+  clips below it against the oracle on every `make verify`.
+
+A secret beyond the sample is not a trade-off here, because nothing about secrets is sampled.
 
 ## What is paid before anybody speaks
 

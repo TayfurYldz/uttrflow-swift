@@ -137,6 +137,18 @@ struct RulesCorpusTests {
         #expect(!Scorer.score(halved, against: testCase).passed)
     }
 
+    @Test("fails when the prose repetition is rewritten as the selected identifier")
+    func identifierThenProseKeepsProseMention() throws {
+        let testCase = try #require(
+            EvaluationCorpus.all.first { $0.id == "editor-identifier-then-prose" })
+        let score = Scorer.score(
+            "We call setUserPrefs at launch, so the settings page never has to setUserPrefs again.",
+            against: testCase
+        )
+        #expect(!score.keptEverythingRequired)
+        #expect(score.lost == ["set user prefs"])
+    }
+
     @Test("names only cases that exist")
     func namesRealCases() {
         let ids = Set(EvaluationCorpus.all.map(\.id))

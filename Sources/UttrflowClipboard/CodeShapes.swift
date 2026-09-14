@@ -4,34 +4,61 @@ import Foundation
 
 /// Recognises code by two independent code-shaped signals, or by one unmistakable one.
 enum CodeShapes {
+    /// Counts the UTF-8 bytes handed to the signals while bound, so a test can bound the reading without a clock.
+    @TaskLocal package static var tally: ScanTally?
+
     static func matches(_ text: String) -> Bool {
         if text.hasPrefix("#!") { return true }
         if isImportHeader(text) { return true }
         if isShellCommand(text) { return true }
-        return signalCount(in: text) >= 2
+        return hasTwoSignals(in: CodeSample.of(text))
     }
 
     // MARK: - The signals
 
-    /// How many independent hints of code the text carries, counted up to the threshold.
-    private static func signalCount(in text: String) -> Int {
-        [
-            text.contains("{") && text.contains("}"),
-            hasStatementEnding(text),
-            isIndented(text),
-            text.firstMatch(of: declaration) != nil,
-            text.firstMatch(of: controlFlow) != nil,
-            text.firstMatch(of: codeOperator) != nil,
-            text.firstMatch(of: invocation) != nil,
-            text.firstMatch(of: commentLine) != nil,
-            text.firstMatch(of: query) != nil,
-            text.firstMatch(of: shellFragment) != nil,
+    /// Whether the text carries two independent hints of code, read cheapest first and stopping at the second.
+    private static func hasTwoSignals(in text: String) -> Bool {
+        tally?.record(text.utf8.count)
+        // A pattern runs only when the bytes hold a literal it cannot match without.
+        func has(_ pattern: Regex<Substring>, needing literals: [StaticString]) -> Bool {
+            ClipBytes.containsAny(text, literals) && text.firstMatch(of: pattern) != nil
+        }
+        let signals: [() -> Bool] = [
+            { text.contains("{") && text.contains("}") },
+            { hasStatementEnding(text) },
+            { isIndented(text) },
+            { has(invocation, needing: ["("]) },
+            { has(commentLine, needing: ["//", "/*", "*", "#", "--"]) },
+            { text.firstMatch(of: query) != nil },
+            { has(shellFragment, needing: ["|", "&&", "$(", ">", "-"]) },
+            {
+                has(
+                    controlFlow,
+                    needing: ["(", "return", "throw", "break", "continue", "yield", "else", "elif", "endif"])
+            },
+            { has(codeOperator, needing: ["=>", "->", "::", "==", "&&", "||", "+=", "-=", "++", "!="]) },
+            {
+                has(
+                    declaration,
+                    needing: [
+                        "func", "def", "fn", "sub", "class", "struct", "enum", "interface", "trait",
+                        "protocol",
+                        "actor", "let", "var", "const", "val", "public", "private", "internal", "static",
+                        "async",
+                        "await", "import", "from", "package", "using", "require", "#include",
+                    ])
+            },
         ]
-        .count(where: { $0 })
+        var found = 0
+        for signal in signals where signal() {
+            found += 1
+            if found == 2 { return true }
+        }
+        return false
     }
 
     /// A line that ends in a semicolon or a brace; mid-line, a semicolon is punctuation people use.
-    private static func hasStatementEnding(_ text: String) -> Bool {
+    static func hasStatementEnding(_ text: String) -> Bool {
         text.split(whereSeparator: \.isNewline).contains { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             return trimmed.hasSuffix(";") || trimmed.hasSuffix("{") || trimmed.hasSuffix("}")
@@ -39,7 +66,7 @@ enum CodeShapes {
     }
 
     /// A continuation line that begins indented; a wrapped paragraph does not indent its second line.
-    private static func isIndented(_ text: String) -> Bool {
+    static func isIndented(_ text: String) -> Bool {
         text.split(whereSeparator: \.isNewline).dropFirst().contains { line in
             line.hasPrefix("\t") || line.hasPrefix("  ")
         }
@@ -65,7 +92,7 @@ enum CodeShapes {
         .anchorsMatchLineEndings()
 
     /// Operators that only occur in code; `=` and `==` are left out because prose about equations has them.
-    nonisolated(unsafe) private static let codeOperator = #/=>|->|::|!==|===|&&|\|\||\+=|-=|\+\+|!=/#
+    nonisolated(unsafe) static let codeOperator = #/=>|->|::|!==|===|&&|\|\||\+=|-=|\+\+|!=/#
 
     /// A name immediately followed by an opening bracket: a call, or a definition.
     nonisolated(unsafe) static let invocation = #/\w\(\S/#
@@ -80,32 +107,70 @@ enum CodeShapes {
         .anchorsMatchLineEndings()
 
     /// Shell punctuation: a pipe, a chained command, a substitution, a redirect, a flag.
-    nonisolated(unsafe) private static let shellFragment = #/\s\|\s|\&\&|\$\(|\s>>?\s|\s--?[a-zA-Z]/#
+    nonisolated(unsafe) static let shellFragment = #/\s\|\s|\&\&|\$\(|\s>>?\s|\s--?[a-zA-Z]/#
 
     // MARK: - The two that stand alone
 
     /// A clip that opens by importing something, which carries no punctuation for a score to reach.
-    nonisolated(unsafe) private static let importHeader =
+    nonisolated(unsafe) static let importHeader =
         #/
         ^(?: import | from | package | using | require | \#include | \#import )
         \s+ ["'<]? [\w.:/*-]+ [">']? ;?$
         /#
         .anchorsMatchLineEndings()
 
-    private static func isImportHeader(_ text: String) -> Bool {
-        String(text.prefix(while: { !$0.isNewline })).wholeMatch(of: importHeader) != nil
+    /// The words an import header opens with, checked before its first line is copied out.
+    private static let importKeywords = [
+        "import", "from", "package", "using", "require", "#include", "#import",
+    ]
+
+    static func isImportHeader(_ text: String) -> Bool {
+        guard importKeywords.contains(where: text.hasPrefix) else { return false }
+        return String(text.prefix(while: { !$0.isNewline })).wholeMatch(of: importHeader) != nil
     }
 
     /// Whether a one-line clip is a command or a pipeline; the command name is the only signal there is.
-    private static func isShellCommand(_ text: String) -> Bool {
-        guard !text.contains(where: \.isNewline) else { return false }
-        if text.hasPrefix("$ ") || text.hasPrefix("./") { return true }
-        return text.split(whereSeparator: { "|&;".contains($0) })
-            .compactMap { $0.split(whereSeparator: \.isWhitespace).first }
-            .contains { commands.contains(String($0)) }
+    static func isShellCommand(_ text: String) -> Bool {
+        ClipBytes.read(text) { _, bytes in asciiShellCommand(bytes) } ?? isShellCommandByCharacter(text)
     }
 
-    private static let commands: Set<String> = [
+    /// `isShellCommand` read character by character, which any clip can be.
+    static func isShellCommandByCharacter(_ text: String) -> Bool {
+        guard !text.contains(where: \.isNewline) else { return false }
+        if text.hasPrefix("$ ") || text.hasPrefix("./") { return true }
+        return text.split(whereSeparator: { "|&;".contains($0) }).contains { segment in
+            let word = segment.drop(while: \.isWhitespace).prefix(while: { !$0.isWhitespace })
+            return !word.isEmpty && commands.contains(String(word))
+        }
+    }
+
+    /// `isShellCommand` read over the bytes of an ASCII clip, where a byte is a character; `nil` for any other clip.
+    private static func asciiShellCommand(_ bytes: UnsafeBufferPointer<UInt8>) -> Bool? {
+        guard ClipBytes.isASCII(bytes) else { return nil }
+        guard !bytes.contains(where: { (0x0A...0x0D).contains($0) }) else { return false }
+        if bytes.starts(with: "$ ".utf8) || bytes.starts(with: "./".utf8) { return true }
+        func isSpace(_ byte: UInt8) -> Bool { byte == 0x20 || byte == 0x09 }
+        var start = 0
+        for offset in 0...bytes.count {
+            guard offset == bytes.count || "|&;".utf8.contains(bytes[offset]) else { continue }
+            var wordStart = start
+            while wordStart < offset, isSpace(bytes[wordStart]) { wordStart += 1 }
+            var wordEnd = wordStart
+            while wordEnd < offset, !isSpace(bytes[wordEnd]) { wordEnd += 1 }
+            // No command is longer than twelve letters, so a longer word is never copied to be looked up.
+            if wordEnd > wordStart, wordEnd - wordStart <= 12,
+                commands.contains(
+                    String(decoding: UnsafeBufferPointer(rebasing: bytes[wordStart..<wordEnd]), as: UTF8.self)
+                )
+            {
+                return true
+            }
+            start = offset + 1
+        }
+        return false
+    }
+
+    static let commands: Set<String> = [
         "sudo", "git", "npm", "npx", "yarn", "pnpm", "brew", "docker", "kubectl", "curl",
         "wget", "ssh", "scp", "rsync", "chmod", "chown", "mkdir", "rmdir", "ln", "ls",
         "cd", "rm", "mv", "cp", "grep", "awk", "sed", "tar", "ps", "kill", "killall",
@@ -113,4 +178,62 @@ enum CodeShapes {
         "swiftc", "cargo", "rustc", "pip", "pip3", "python3", "node", "deno", "bun",
         "apt", "apt-get", "yum", "dnf", "pacman", "terraform", "aws", "gcloud", "psql",
     ]
+}
+
+/// The part of a clip the code-shape signals read: all of a small one, and the start, end and evenly spaced windows of a large one.
+enum CodeSample {
+    /// The most UTF-8 bytes of a clip the signals read.
+    static let budget = 64_000
+
+    /// The longest a sample can be: the budget, and a line break after each piece.
+    static let longest = budget + windows + 2
+
+    /// Bytes read from each end, where a clip's imports, headers and closing lines are.
+    static let edge = 16_000
+
+    /// How many windows are spread across the middle, and how long each is.
+    static let windows = 16
+    static let window = 2_000
+
+    static func of(_ text: String) -> String {
+        let count = text.utf8.count
+        guard count > budget else { return text }
+        return ClipBytes.read(text) { clip, bytes in
+            let middle = count - 2 * edge - window
+            var pieces = [piece(clip, bytes, from: 0, to: edge, alignStart: false, alignEnd: true)]
+            for index in 0..<windows {
+                let start = edge + middle * index / (windows - 1)
+                pieces.append(
+                    piece(clip, bytes, from: start, to: start + window, alignStart: true, alignEnd: true))
+            }
+            pieces.append(
+                piece(clip, bytes, from: count - edge, to: count, alignStart: true, alignEnd: false))
+            var sample = ""
+            sample.reserveCapacity(budget + windows + 2)
+            for piece in pieces {
+                sample += piece
+                if !(piece.last?.isNewline ?? true) { sample += "\n" }
+            }
+            return sample
+        }
+    }
+
+    /// A piece of the clip trimmed to whole lines where it holds a line break, so no line is read half.
+    private static func piece(
+        _ clip: ClipBytes, _ bytes: UnsafeBufferPointer<UInt8>, from lower: Int, to upper: Int,
+        alignStart: Bool, alignEnd: Bool
+    ) -> Substring {
+        var lower = lower
+        var upper = upper
+        let lineFeed = UInt8(ascii: "\n")
+        if alignStart, let feed = (lower..<upper).first(where: { bytes[$0] == lineFeed }), feed + 1 < upper {
+            lower = feed + 1
+        }
+        if alignEnd, let feed = (lower..<upper).last(where: { bytes[$0] == lineFeed }) {
+            upper = feed + 1
+        }
+        let start = clip.character(atOrBefore: lower)
+        let end = max(start, clip.character(atOrBefore: upper))
+        return clip.text[start..<end]
+    }
 }

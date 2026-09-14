@@ -724,7 +724,7 @@ public enum EvaluationCorpus {
             spoken: "we call set user prefs at launch so the settings page never has to set user prefs again",
             expected:
                 "We call setUserPrefs at launch, so the settings page never has to set user prefs again.",
-            mustKeep: ["setUserPrefs", "launch"],
+            mustKeep: ["setUserPrefs", "set user prefs", "launch"],
             context: AppContext(
                 applicationName: "Visual Studio Code",
                 bundleIdentifier: "com.microsoft.VSCode",

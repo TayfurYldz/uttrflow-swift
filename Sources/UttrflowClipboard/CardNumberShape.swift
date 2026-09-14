@@ -4,13 +4,15 @@
 enum CardNumberShape {
     /// Whether a card number stands anywhere in the text, on its own rather than inside a longer number.
     static func matches(_ text: String) -> Bool {
-        text.matches(of: candidate).contains { match in
-            standsAlone(match.range, in: text) && isCardNumber(match.output.0.filter(\.isNumber))
+        CardNumberRuns.candidates(in: text, tally: SecretShapes.patternTally).contains { run in
+            text[run].matches(of: candidate).contains { match in
+                standsAlone(match.range, in: text) && isCardNumber(match.output.0.filter(\.isNumber))
+            }
         }
     }
 
     /// Digits unbroken, or in printed groups with one separator throughout; `issuers` rules on length.
-    nonisolated(unsafe) private static let candidate =
+    nonisolated(unsafe) static let candidate =
         #/
         [0-9]{4}([\x20\-])[0-9]{4}\1[0-9]{4}\1[0-9]{4}(?:\1[0-9]{3})?   # 4-4-4-4 and 4-4-4-4-3
         | [0-9]{4}([\x20\-])[0-9]{6}\2[0-9]{4,5}                     # 4-6-5 and 4-6-4
@@ -22,7 +24,7 @@ enum CardNumberShape {
     private static let joiners: Set<Character> = ["-", ".", "/", ":", "_"]
 
     /// Whether the match is bounded by something other than more digits, directly or across one joiner.
-    private static func standsAlone(_ range: Range<String.Index>, in text: String) -> Bool {
+    static func standsAlone(_ range: Range<String.Index>, in text: String) -> Bool {
         let before = text[..<range.lowerBound].suffix(2)
         let after = text[range.upperBound...].prefix(2)
         if let last = before.last {
@@ -37,7 +39,7 @@ enum CardNumberShape {
     }
 
     /// Whether these digits are a length some network issues under its prefix, and pass Luhn.
-    private static func isCardNumber(_ digits: String) -> Bool {
+    static func isCardNumber(_ digits: String) -> Bool {
         issued(digits) && luhn(digits)
     }
 
