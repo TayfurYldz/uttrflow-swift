@@ -83,7 +83,7 @@ The first release named by its date. Nothing about updating changes: an installe
 - **History filed a dictation under the app it started in**, not the one the words landed
   in when you switched windows while speaking.
 - **Tab could apply a suggestion meant for an earlier line.** A key typed just before Tab
-  left Tab applying the edit worked out before it, so "git com" became "git commmit". An
+  left Tab applying the edit worked out before it, so the letter just typed came out twice. An
   out-of-date suggestion is now refused, and the text being replaced is checked before it
   is taken back.
 - **A line you typed in a chat and never sent could become a suggestion later.** In a chat
@@ -454,7 +454,6 @@ where its code became readable.
   disagree.
 
 [Unreleased]: https://github.com/uttrflow/uttrflow-swift/commits/main
-[2026.9.14]: https://github.com/uttrflow/releases/releases/tag/v2026.9.14
 [0.5.0]: https://github.com/uttrflow/releases/releases/tag/v0.5.0
 [0.4.0]: https://github.com/uttrflow/releases/releases/tag/v0.4.0-test.90a5262
 [0.3.0]: https://github.com/uttrflow/releases/releases/tag/v0.3.0-test.0f0a7ad
