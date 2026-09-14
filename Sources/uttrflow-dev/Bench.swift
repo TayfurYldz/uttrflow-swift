@@ -29,6 +29,12 @@ struct Bench: AsyncParsableCommand {
     @Option(name: .long, help: "Seconds between looks at the recording for a piece to work ahead on.")
     var earlyPoll: Double = 1
 
+    func validate() throws {
+        guard earlyPoll.isFinite, earlyPoll >= 0.01, earlyPoll <= 60 else {
+            throw ValidationError("--early-poll must be between 0.01 and 60 seconds.")
+        }
+    }
+
     func run() async throws {
         let model = try resolve(modelVariant)
         let store = FileSystemSpeechModelStore.whisperKit()
@@ -136,8 +142,14 @@ struct BenchJob {
         id = fields[0]
         wav = fields[1]
         vocabulary = fields.count > 2 ? fields[2].split(separator: ",").map(String.init) : []
-        realTime = fields.count > 3 ? fields[3] != "fast" : true
-        rulesOnly = fields.count > 4 && fields[4] == "rules"
+        let mode = fields.count > 3 ? fields[3] : "rt"
+        let cleaner = fields.count > 4 ? fields[4] : "shipping"
+        // A typo must stop the run, or its dictations would be scored as the default.
+        guard ["rt", "fast"].contains(mode), ["shipping", "rules"].contains(cleaner) else {
+            throw ValidationError("Mode must be rt or fast and cleaner shipping or rules: \(line)")
+        }
+        realTime = mode == "rt"
+        rulesOnly = cleaner == "rules"
     }
 }
 

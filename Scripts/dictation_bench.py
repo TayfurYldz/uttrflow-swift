@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Builds the synthetic dictation corpus, writes jobs for `uttrflow-dev bench`, and scores a run. See Docs/performance.md.
-import argparse, array, json, math, os, random, re, statistics, subprocess, sys, unicodedata, wave
+import argparse, array, hashlib, json, math, os, random, re, statistics, subprocess, sys, unicodedata, wave
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -204,13 +204,15 @@ def corpus(args):
     audio = os.path.join(args.out, "audio"); os.makedirs(audio, exist_ok=True)
     made = clips()
     for c in made:
-        c["wav"] = os.path.join(audio, c["id"] + ".wav")
+        # Named by what was spoken and by whom, so a changed passage or voice is spoken again rather than reused.
+        spoken = hashlib.sha256(f"{c['voice']}\n{c['say']}\nLEI16@16000".encode()).hexdigest()[:12]
+        c["wav"] = os.path.join(audio, f"{c['id']}-{spoken}.wav")
         if not os.path.exists(c["wav"]):
             subprocess.run(["say", "-v", c["voice"], "-o", c["wav"], "--file-format=WAVE",
                             "--data-format=LEI16@16000", c["say"]], check=True)
     for c in [c for c in made if c["id"] in VARIANT_BASES]:
         for name, change in (("snr20", noisy(20, 1)), ("snr10", noisy(10, 2)), ("quiet", gain(-24)), ("hot", gain(12))):
-            v = dict(c, id=f"{c['id']}-{name}", variant=name, wav=os.path.join(audio, f"{c['id']}-{name}.wav"))
+            v = dict(c, id=f"{c['id']}-{name}", variant=name, wav=c["wav"].replace(".wav", f"-{name}.wav"))
             if not os.path.exists(v["wav"]):
                 write_wav(v["wav"], change(read_wav(c["wav"])))
             made.append(v)
@@ -225,10 +227,13 @@ def jobs(args):
     chosen = [c for c in made if not args.categories or c["category"] in args.categories.split(",")]
     if args.clean_only:
         chosen = [c for c in chosen if c["variant"] == "clean"]
+    cleaners = args.cleaners.split(",")
+    if not set(cleaners) <= {"shipping", "rules"}:
+        sys.exit(f"--cleaners takes shipping and rules, not {args.cleaners}")
     lines = []
     for _ in range(args.repeat):
         for c in chosen:
-            for cleaner in args.cleaners.split(","):
+            for cleaner in cleaners:
                 lines.append("\t".join([c["id"], c["wav"], ",".join(c["vocabulary"]), args.mode, cleaner]))
     sys.stdout.write("\n".join(lines) + "\n")
 

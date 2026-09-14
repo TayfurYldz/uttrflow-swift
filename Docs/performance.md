@@ -1195,6 +1195,14 @@ make bakeoff ARGS="gpu-memory --passes 40"           # the suggestion model's GP
 make bakeoff ARGS="gpu-memory --typing --show"       # processor a pass while a reply is typed, and every line
 ```
 
+The speech model must already be installed (`uttrflow-dev models install`). Audio is
+synthesised on the first run and cached; change a passage or the voice and it is
+re-spoken, so a stale clip can never be reported under a changed passage.
+
+Every figure printed is read off a `PerformanceReport` built by `PerformanceProfiler` in
+`UttrflowEval`, where the phase order, the leak rules and the scaling verdict are covered
+by tests. `uttrflow-bakeoff` contributes the arguments, the audio and the table.
+
 The end-to-end word error rate and wait, as in [the section above](#dictation-end-to-end-the-words-and-the-wait):
 
 ```
@@ -1209,13 +1217,6 @@ cat .build/bench/jobs-fast.tsv .build/bench/jobs-rt.tsv > .build/bench/jobs.tsv
 python3 Scripts/dictation_bench.py score .build/bench/run.out
 ```
 
-Run one `bench` at a time: two processes compete for the Neural Engine and each other's compile.
+The corpus names each clip's audio by its voice and words, so changing either speaks it again. Run one `bench` at a time: two processes compete for the Neural Engine and each other's compile.
 The run above took about half an hour, its first load included.
 
-The speech model must already be installed (`uttrflow-dev models install`). Audio is
-synthesised on the first run and cached; change a passage or the voice and it is
-re-spoken, so a stale clip can never be reported under a changed passage.
-
-Every figure printed is read off a `PerformanceReport` built by `PerformanceProfiler` in
-`UttrflowEval`, where the phase order, the leak rules and the scaling verdict are covered
-by tests. `uttrflow-bakeoff` contributes the arguments, the audio and the table.
