@@ -4,10 +4,31 @@ import Foundation
 
 /// Works out what a copied string is; secret is asked first because it is the only costly miss.
 public enum ClipKindDetector {
-    /// What this text is, defaulting to `.text`, the answer that costs nothing when wrong.
+    /// What this text is and, for code, which language, worked out on a utility-priority task off the caller's actor.
+    public static func classify(_ text: String) async -> ClipClassification {
+        await classify(text, using: classification(of:))
+    }
+
+    /// `classify(_:)` with the work supplied; a continuation, not `Task.value`, so awaiting it does not raise its priority.
+    static func classify(
+        _ text: String, using work: @escaping @Sendable (String) -> ClipClassification
+    ) async -> ClipClassification {
+        await withCheckedContinuation { continuation in
+            Task.detached(priority: .utility) { continuation.resume(returning: work(text)) }
+        }
+    }
+
+    /// What this text is and, for code, which language, worked out on the calling thread.
+    public static func classification(of text: String) -> ClipClassification {
+        let kind = kind(of: text)
+        return ClipClassification(kind: kind, language: kind == .code ? CodeLanguage.detect(text) : nil)
+    }
+
+    /// What this text is, defaulting to `.text`, the answer that costs nothing when wrong. See `Docs/performance.md`.
     public static func kind(of text: String) -> ClipKind {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .text }
+        trimmed.makeContiguousUTF8()
 
         if SecretShapes.matches(trimmed) { return .secret }
         if ColourShape.matches(trimmed) { return .colour }
@@ -17,6 +38,12 @@ public enum ClipKindDetector {
         if CodeShapes.matches(trimmed) { return .code }
         return .text
     }
+}
+
+/// A clip's kind and, when it is code, the language it is written in.
+public struct ClipClassification: Sendable, Equatable {
+    public let kind: ClipKind
+    public let language: CodeLanguage?
 }
 
 /// A web address, and nothing that merely resembles one.

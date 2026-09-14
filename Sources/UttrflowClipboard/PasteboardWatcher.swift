@@ -125,13 +125,15 @@ public actor PasteboardWatcher {
         guard fitsTheBound(text, html) else { return nil }
 
         // A concealed copy is a password to its writer, whatever its shape. See Docs/clipboard-secrets.md.
-        let kind = markers.contains(.concealed) ? .secret : ClipKindDetector.kind(of: text)
+        let classified =
+            markers.contains(.concealed)
+            ? ClipClassification(kind: .secret, language: nil) : ClipKindDetector.classification(of: text)
         return NoticedClip(
             clip: Clip(
-                text: text, kind: kind, copiedAt: date,
+                text: text, kind: classified.kind, copiedAt: date,
                 source: source.frontmostApplicationName(),
                 // Only of a clip already judged to be code, so prose never pays for the detector.
-                language: kind == .code ? CodeLanguage.detect(text) : nil,
+                language: classified.language,
                 // E — kept beside the plain form, never instead of it.
                 richText: html))
     }

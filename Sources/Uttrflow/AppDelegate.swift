@@ -897,13 +897,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             _ = try await clipboard.delete(id, keeping: retention)
             await startForgettingTheUndo()
         case .create(let text):
-            // Detected here: the panel knows what was typed, not what a string is.
-            let kind = ClipKindDetector.kind(of: text)
+            // Detected here, off the main actor: the panel knows what was typed, not what a string is.
+            let classified = await ClipKindDetector.classify(text)
             let clip = Clip(
-                text: text, kind: kind, copiedAt: Date(), source: nil,
+                text: text, kind: classified.kind, copiedAt: Date(), source: nil,
                 // Typed into the panel and kept, so it belongs with what the app made.
                 origin: .uttrflow,
-                language: kind == .code ? CodeLanguage.detect(text) : nil)
+                language: classified.language)
             _ = try await clipboard.record(clip, keeping: retention)
         case .rewriteText(let id, let tidied):
             _ = try await clipboard.setText(tidied, of: id, keeping: retention)
@@ -1060,12 +1060,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func recordAsClip(_ text: String) {
         Task { [clipboard] in
-            let kind = ClipKindDetector.kind(of: text)
+            let classified = await ClipKindDetector.classify(text)
             let clip = Clip(
-                text: text, kind: kind, copiedAt: Date(), source: ClipOrigin.dictationSource,
+                text: text, kind: classified.kind, copiedAt: Date(), source: ClipOrigin.dictationSource,
                 // Which keeps it out of History, where it would be the newest thing every time.
                 origin: .uttrflow,
-                language: kind == .code ? CodeLanguage.detect(text) : nil)
+                language: classified.language)
             _ = try? await clipboard.record(clip, keeping: retention)
             await refreshPanelIfOpen()
         }
