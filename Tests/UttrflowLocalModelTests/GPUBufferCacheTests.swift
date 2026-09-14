@@ -55,6 +55,19 @@ struct GPUBufferCacheTests {
         #expect(recorder.recorded == ["hold", "clear"])
     }
 
+    @Test("Loading the model caps the cache and empties it after, even when the load fails")
+    func loadHoldsThenClears() async throws {
+        let cache = try FakeCache()
+        try cache.addConfiguration()
+        try cache.add("model.safetensors", FakeCache.weights(bytes: 512))
+        let recorder = CacheRecorder()
+        let scorer = MLXCandidateScorer(
+            model: cache.model(), maximumTokens: 16, bufferCache: recorder.control, cache: cache.root)
+        await #expect(throws: (any Error).self) { try await scorer.prepare() }
+        #expect(recorder.recorded == ["hold", "clear"])
+        #expect(await scorer.isReady == false)
+    }
+
     @Test("Releasing the model empties the cache and leaves nothing to answer with")
     func releaseClears() async {
         let recorder = CacheRecorder()
