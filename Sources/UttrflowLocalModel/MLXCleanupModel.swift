@@ -33,7 +33,8 @@ public actor MLXCleanupModel: CleanupModel {
             let directory = try await model.weightsDirectory(
                 cache: HubCache.default.cacheDirectory, downloader: { #hubDownloader() },
                 onProgress: onProgress)
-            container = try await QuantizedLoad.container(from: directory, using: #huggingFaceTokenizerLoader())
+            container = try await QuantizedLoad.container(
+                from: directory, using: #huggingFaceTokenizerLoader())
         } catch {
             throw .transformFailed(kind: .localModel, description: error.localizedDescription)
         }
