@@ -47,7 +47,7 @@ so neither arrow nor Return is ever claimed for one — Tab is the only way to t
 |---|---|
 | ⎋ | The suggestion goes; the dot stays |
 | ⎋⎋ | This field offers nothing more |
-| ⌥⎋ | Suggestions stop everywhere until turned back on |
+| ⌥⎋ | AI suggestions stop everywhere until turned back on |
 
 ⎋ with nothing drawn is not ours: it closes the application's own dialog, and a tap that
 swallows it is a tap the user has to quit the app to escape from.

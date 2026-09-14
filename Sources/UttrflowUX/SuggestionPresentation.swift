@@ -143,8 +143,8 @@ public struct SuggestionPresentation: Sendable, Equatable {
         guard let leader = inline else { return "" }
         let alternatives = rows.filter { !$0.isSelected }.map(\.candidate)
         let take = "\(acceptKey.spokenName) to accept\(Self.cost(of: leader))."
-        guard !alternatives.isEmpty else { return "Suggestion: \(leader.candidate). \(take)" }
-        return "Suggestion: \(leader.candidate). \(take) Alternatives: "
+        guard !alternatives.isEmpty else { return "AI suggestion: \(leader.candidate). \(take)" }
+        return "AI suggestion: \(leader.candidate). \(take) Alternatives: "
             + alternatives.joined(separator: ", ") + "."
     }
 
