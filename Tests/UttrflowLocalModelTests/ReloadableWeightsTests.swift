@@ -118,7 +118,7 @@ struct ReloadableWeightsTests {
 /// The scorer needs a GPU and gigabytes of weights, so this reads its source to say every load goes through the reloadable weights.
 @Suite("How the suggestion model loads its weights")
 struct ScorerLoadWiringTests {
-    @Test("Only the first load builds through mlx-swift-lm, and prepare asks the reloadable weights")
+    @Test("Only the first load builds, through QuantizedLoad, and prepare asks the reloadable weights")
     func prepareGoesThroughReloadableWeights() throws {
         let file = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -126,7 +126,8 @@ struct ScorerLoadWiringTests {
             .deletingLastPathComponent()
             .appending(path: "Sources/UttrflowLocalModel/MLXCandidateScorer.swift")
         let text = try String(contentsOf: file, encoding: .utf8)
-        #expect(text.components(separatedBy: "loadModelContainer(").count == 2)
+        #expect(text.components(separatedBy: "QuantizedLoad.container(").count == 2)
+        #expect(!text.contains("loadModelContainer("))
         #expect(text.contains("try await weights.load(from: directory)"))
         #expect(text.contains("await weights.unload()"))
     }
