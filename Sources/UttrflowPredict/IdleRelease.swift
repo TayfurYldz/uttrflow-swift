@@ -31,6 +31,8 @@ public actor IdleReleasingModel<Model: ReleasableModel>: ReleasableModel {
     private var isWanted = false
     /// Whether the weights are loaded or loading, so a query does not start a second load.
     private var isHeld = false
+    /// The latest prepare, release or reload; a step that finishes under an older one changes nothing.
+    private var generation = 0
     private var lastAsked = ContinuousClock.now
     /// The latest load or release, which the next one waits for so they land in the order they were asked.
     private var work: Task<Void, Never>?
@@ -48,6 +50,7 @@ public actor IdleReleasingModel<Model: ReleasableModel>: ReleasableModel {
         isWanted = true
         isHeld = true
         lastAsked = .now
+        let asked = advance()
         let previous = work
         let model = model
         let step = Task { () -> (any Error)? in
@@ -61,15 +64,17 @@ public actor IdleReleasingModel<Model: ReleasableModel>: ReleasableModel {
         }
         work = Task { _ = await step.value }
         if let error = await step.value {
-            isHeld = false
+            await settle(asked)
             throw error
         }
+        guard generation == asked else { return }
         watchForIdle()
     }
 
     public func release() async {
         isWanted = false
         isHeld = false
+        advance()
         watch?.cancel()
         let previous = work
         let model = model
@@ -114,6 +119,7 @@ public actor IdleReleasingModel<Model: ReleasableModel>: ReleasableModel {
         guard isHeld else { return false }
         guard isWanted, lastAsked.duration(to: now) >= idleAfter else { return true }
         isHeld = false
+        advance()
         let previous = work
         let model = model
         let step = Task {
@@ -133,20 +139,41 @@ public actor IdleReleasingModel<Model: ReleasableModel>: ReleasableModel {
 
     private func reload() {
         isHeld = true
+        let asked = advance()
         let previous = work
         let model = model
         work = Task { [weak self] in
             await previous?.value
             do {
                 try await model.prepare(onProgress: { _ in })
-                await self?.watchForIdle()
+                await self?.loaded(asked)
             } catch {
-                await self?.loadFailed()
+                await self?.settle(asked)
             }
         }
     }
 
-    private func loadFailed() { isHeld = false }
+    /// Starts a new generation and returns it, so every step already queued knows it is stale.
+    @discardableResult
+    private func advance() -> Int {
+        generation += 1
+        return generation
+    }
+
+    /// Watches a background load that succeeded, unless something newer was asked for since.
+    private func loaded(_ asked: Int) {
+        guard generation == asked else { return }
+        watchForIdle()
+    }
+
+    /// Takes the hold from what the model reports after a failed load, if that load is still the latest.
+    private func settle(_ asked: Int) async {
+        guard generation == asked else { return }
+        let ready = await model.isReady
+        guard generation == asked else { return }
+        isHeld = ready
+        if ready { watchForIdle() }
+    }
 
     /// Checks for idleness a few times per window for as long as the model is held.
     private func watchForIdle() {

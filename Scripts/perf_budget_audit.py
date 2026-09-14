@@ -63,13 +63,7 @@ WAKEUPS_BOUND_BY = {
 }
 
 # Known breaches of the budget, each open under the issue that fixes it; a listed breach that is gone fails as stale.
-BREACHES_OPEN = {
-    ("Sources/Uttrflow/UttrflowApp.swift", "model", "model, generating: generating,"): "#432",
-    ("Sources/Uttrflow/UttrflowApp.swift", "model", "model.prepare(onProgress: onProgress) },"): "#432",
-    ("Sources/Uttrflow/UttrflowApp.swift", "model", "model.release() })"): "#432",
-    ("Sources/UttrflowLocalModel/MLXCandidateScorer.swift", "cache", "prepare"): "#433",
-    ("Sources/UttrflowLocalModel/MLXCandidateScorer.swift", "cache", "warmInstructions"): "#433",
-}
+BREACHES_OPEN = {}
 
 # ---------------------------------------------------------------------------------------------------------------
 # Reading Swift

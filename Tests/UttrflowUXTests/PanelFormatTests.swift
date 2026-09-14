@@ -103,6 +103,19 @@ struct PanelFormatTests {
         #expect(Self.sheet(Self.swiftCode.text)?.isConfirmEnabled == false)
     }
 
+    /// A clip past the diff's limits still offers its change, stated by size, rather than freezing the panel to draw it.
+    @Test("D6 · a clip too large to compare says so and still offers the change")
+    func tooLargeToCompare() {
+        let sheet = PanelPresenter.formattingSheet(.tooLarge(before: 30_000, after: 30_001), changes: true)
+
+        #expect(sheet.diff.isEmpty)
+        #expect(sheet.note == "Too large to compare line by line: 30000 lines before, 30001 after")
+        #expect(sheet.isConfirmEnabled)
+        #expect(
+            PanelPresenter.formattingSheet(.tooLarge(before: 1, after: 1), changes: false).isConfirmEnabled
+                == false)
+    }
+
     /// The result is carried on the sheet, since running the formatter twice could answer differently.
     @Test("keeping it writes exactly what was shown")
     func keepsWhatWasShown() {

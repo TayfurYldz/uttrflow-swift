@@ -77,6 +77,13 @@ public enum EvaluationCorpus {
             expected: "I took her to the ER last night.",
             mustKeep: ["ER"]
         ),
+        // No determiner stands before "ER" here, so only the meaning guard is left to notice the filler pass took a word.
+        .init(
+            id: "acronym-spelled-like-a-filler", category: .everyday,
+            spoken: "we rushed him to ER before midnight",
+            expected: "We rushed him to ER before midnight.",
+            mustKeep: ["ER"]
+        ),
         // The unwrapper's case: a quote pair the recogniser reported is the speaker's, not the model's packaging.
         .init(
             id: "quoted-whole-utterance", category: .everyday,
@@ -180,6 +187,13 @@ public enum EvaluationCorpus {
             expected: "No, I don't think so. We should wait for the results.",
             mustKeep: ["no", "wait", "results"]
         ),
+        // "no" answers here, and the words around it are said once each way, so no half was taken back.
+        .init(
+            id: "answer-no-before-a-restated-phrase", category: .everyday,
+            spoken: "tell the landlord no, the landlord has to wait",
+            expected: "Tell the landlord no, the landlord has to wait.",
+            mustKeep: ["no", "landlord", "wait"]
+        ),
         // The trigger heads each item of a list here, so neither item is a half the speaker took back.
         .init(
             id: "coordinated-list-kept", category: .everyday,
@@ -231,6 +245,153 @@ public enum EvaluationCorpus {
             spoken: "put a comma after the greeting",
             expected: "Put a comma after the greeting.",
             mustKeep: ["comma"]
+        ),
+        // Issue 237: a bare mark name said where the mark goes, which must still become the mark.
+        .init(
+            id: "spoken-comma-after-a-greeting", category: .everyday,
+            spoken: "hi team comma I wanted to check on the invoice",
+            expected: "Hi team, I wanted to check on the invoice.",
+            mustKeep: ["team", "invoice"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-comma-after-an-opener", category: .everyday,
+            spoken: "however comma the second build passed",
+            expected: "However, the second build passed.",
+            mustKeep: ["second build"], mustNotAdd: ["comma"]
+        ),
+        // Issue 435: this one, "around-a-clause" and "in-a-list" still fail, since a determiner before the phrase refuses the comma.
+        .init(
+            id: "spoken-comma-before-a-clause", category: .everyday,
+            spoken: "if the tests pass comma we ship tonight",
+            expected: "If the tests pass, we ship tonight.",
+            mustKeep: ["tests pass", "ship tonight"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-comma-after-yes", category: .everyday,
+            spoken: "yes comma that works for me",
+            expected: "Yes, that works for me.",
+            mustKeep: ["works for me"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-commas-around-a-clause", category: .everyday,
+            spoken: "the cafe by the station comma which opens early comma is the best one",
+            expected: "The cafe by the station, which opens early, is the best one.",
+            mustKeep: ["station", "opens early"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-commas-in-a-list", category: .everyday,
+            spoken: "pack the charger comma the cable comma and the adapter",
+            expected: "Pack the charger, the cable, and the adapter.",
+            mustKeep: ["charger", "cable", "adapter"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-commas-in-a-bare-list", category: .everyday,
+            spoken: "we need apples comma pears comma plums",
+            expected: "We need apples, pears, plums.",
+            mustKeep: ["apples", "pears", "plums"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-comma-before-and", category: .everyday,
+            spoken: "we stayed late comma and then we went home",
+            expected: "We stayed late, and then we went home.",
+            mustKeep: ["stayed late", "went home"], mustNotAdd: ["comma"]
+        ),
+        .init(
+            id: "spoken-colon-before-a-clause", category: .everyday,
+            spoken: "the reason is simple colon we ran out of time",
+            expected: "The reason is simple: we ran out of time.",
+            mustKeep: ["reason is simple", "ran out of time"], mustNotAdd: ["colon"]
+        ),
+        .init(
+            id: "spoken-colon-before-an-item", category: .everyday,
+            spoken: "one more thing colon the demo moves to friday",
+            expected: "One more thing: the demo moves to Friday.",
+            mustKeep: ["demo", "Friday"], mustNotAdd: ["colon"]
+        ),
+        .init(
+            id: "spoken-colon-at-the-end", category: .everyday,
+            spoken: "the steps are as follows colon",
+            expected: "The steps are as follows:",
+            mustKeep: ["as follows"], mustNotAdd: ["colon"]
+        ),
+        .init(
+            id: "spoken-dash-before-a-clause", category: .everyday,
+            spoken: "we left early dash it was raining",
+            expected: "We left early \u{2014} it was raining.",
+            mustKeep: ["left early", "raining"], mustNotAdd: ["dash"]
+        ),
+        // Issue 237: the same bare names said as ordinary words, which must survive as words.
+        .init(
+            id: "colon-cancer-as-words", category: .everyday,
+            spoken: "she was screened for colon cancer last year",
+            expected: "She was screened for colon cancer last year.",
+            mustKeep: ["colon cancer"], mustNotAdd: [":"]
+        ),
+        .init(
+            id: "colon-trouble-as-words", category: .everyday,
+            spoken: "he has colon trouble again",
+            expected: "He has colon trouble again.",
+            mustKeep: ["colon trouble"], mustNotAdd: [":"]
+        ),
+        .init(
+            id: "colon-surgery-as-words", category: .everyday,
+            spoken: "she booked colon surgery for june",
+            expected: "She booked colon surgery for June.",
+            mustKeep: ["colon surgery"], mustNotAdd: [":"]
+        ),
+        .init(
+            id: "colon-health-as-words", category: .everyday,
+            spoken: "eat more fibre for colon health",
+            expected: "Eat more fibre for colon health.",
+            mustKeep: ["colon health"], mustNotAdd: [":"]
+        ),
+        .init(
+            id: "comma-separated-as-words", category: .everyday,
+            spoken: "export the report as comma separated values",
+            expected: "Export the report as comma separated values.",
+            mustKeep: ["comma separated"], mustNotAdd: [","]
+        ),
+        .init(
+            id: "comma-usage-as-words", category: .everyday,
+            spoken: "try to reduce comma usage in formal writing",
+            expected: "Try to reduce comma usage in formal writing.",
+            mustKeep: ["comma usage"], mustNotAdd: [","]
+        ),
+        .init(
+            id: "comma-splices-as-words", category: .everyday,
+            spoken: "he keeps writing comma splices in every draft",
+            expected: "He keeps writing comma splices in every draft.",
+            mustKeep: ["comma splices"], mustNotAdd: [","]
+        ),
+        .init(
+            id: "comma-placement-as-words", category: .everyday,
+            spoken: "please fix comma placement in the second paragraph",
+            expected: "Please fix comma placement in the second paragraph.",
+            mustKeep: ["comma placement"], mustNotAdd: [","]
+        ),
+        .init(
+            id: "dash-training-as-words", category: .everyday,
+            spoken: "sprint dash training starts on monday",
+            expected: "Sprint dash training starts on Monday.",
+            mustKeep: ["dash training"], mustNotAdd: ["\u{2014}"]
+        ),
+        .init(
+            id: "dash-cam-as-words", category: .everyday,
+            spoken: "we checked dash cam footage from the night",
+            expected: "We checked dash cam footage from the night.",
+            mustKeep: ["dash cam"], mustNotAdd: ["\u{2014}"]
+        ),
+        .init(
+            id: "dash-drills-as-words", category: .everyday,
+            spoken: "our team runs dash drills before every match",
+            expected: "Our team runs dash drills before every match.",
+            mustKeep: ["dash drills"], mustNotAdd: ["\u{2014}"]
+        ),
+        .init(
+            id: "period-furniture-as-words", category: .everyday,
+            spoken: "the museum shows period furniture from the old manor",
+            expected: "The museum shows period furniture from the old manor.",
+            mustKeep: ["period furniture"]
         ),
         .init(
             id: "new-paragraph", category: .everyday,
@@ -438,6 +599,10 @@ public enum EvaluationCorpus {
             mustKeep: ["PR", "review"]
         ),
     ]
+
+    /// A notes document, where a spoken list is laid out and a sentence stays a sentence.
+    static let numberedNotes = AppContext(
+        applicationName: "Pages", bundleIdentifier: "com.apple.iWork.Pages", documentName: "Notes.pages")
 
     // MARK: Context pairs, identical words under two windows. See Docs/eval-context-cases.md.
 
@@ -793,6 +958,185 @@ public enum EvaluationCorpus {
             destination: .document,
             mustBeginWith: "Bring",
             mustEndWith: "batteries."
+        ),
+        // Issue 238: numbered items another item corroborates, which must still be laid out as a list.
+        .init(
+            id: "numbered-items-for-a-trip", category: .contextual,
+            spoken: "for the trip number one book the hotel number two rent a car",
+            expected: "For the trip\n1. Book the hotel\n2. Rent a car",
+            mustKeep: ["book the hotel", "rent a car"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "For the trip\n"
+        ),
+        .init(
+            id: "numbered-items-three-of-them", category: .contextual,
+            spoken: "today we need number one milk number two eggs number three bread",
+            expected: "Today we need\n1. Milk\n2. Eggs\n3. Bread",
+            mustKeep: ["milk", "eggs", "bread"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Today we need\n"
+        ),
+        .init(
+            id: "numbered-items-a-plan", category: .contextual,
+            spoken: "the plan number one fix the build number two ship it",
+            expected: "The plan\n1. Fix the build\n2. Ship it",
+            mustKeep: ["fix the build", "ship it"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "The plan\n"
+        ),
+        .init(
+            id: "numbered-items-before-lunch", category: .contextual,
+            spoken: "before lunch number one review the draft number two send it to legal",
+            expected: "Before lunch\n1. Review the draft\n2. Send it to legal",
+            mustKeep: ["review the draft", "send it to legal"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Before lunch\n"
+        ),
+        .init(
+            id: "numbered-items-as-digits", category: .contextual,
+            spoken: "things to check number 1 the lights number 2 the brakes",
+            expected: "Things to check\n1. The lights\n2. The brakes",
+            mustKeep: ["lights", "brakes"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Things to check\n"
+        ),
+        .init(
+            id: "numbered-items-an-agenda", category: .contextual,
+            spoken: "the agenda number one budget number two hiring number three travel",
+            expected: "The agenda\n1. Budget\n2. Hiring\n3. Travel",
+            mustKeep: ["budget", "hiring", "travel"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "The agenda\n"
+        ),
+        .init(
+            id: "numbered-items-priorities", category: .contextual,
+            spoken: "priorities this week number one hire a designer number two finish the audit",
+            expected: "Priorities this week\n1. Hire a designer\n2. Finish the audit",
+            mustKeep: ["hire a designer", "finish the audit"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Priorities this week\n"
+        ),
+        .init(
+            id: "numbered-items-steps", category: .contextual,
+            spoken:
+                "to reset it number one unplug the router number two wait a minute number three plug it back in",
+            expected: "To reset it\n1. Unplug the router\n2. Wait a minute\n3. Plug it back in",
+            mustKeep: ["unplug the router", "wait a minute", "plug it back in"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "To reset it\n"
+        ),
+        .init(
+            id: "numbered-items-continuing", category: .contextual,
+            spoken: "then number two call the landlord number three pay the rent",
+            expected: "Then\n2. Call the landlord\n3. Pay the rent",
+            mustKeep: ["call the landlord", "pay the rent"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Then\n"
+        ),
+        .init(
+            id: "numbered-items-reminders", category: .contextual,
+            spoken: "reminders number one water the plants number two feed the cat",
+            expected: "Reminders\n1. Water the plants\n2. Feed the cat",
+            mustKeep: ["water the plants", "feed the cat"], context: numberedNotes,
+            mustNotAdd: ["number"], destination: .document,
+            mustBeginWith: "Reminders\n"
+        ),
+        // Issue 238: a designator spoken mid-sentence, which must keep its word and its number.
+        .init(
+            id: "number-ring-not-an-item", category: .contextual,
+            spoken: "please ring number five now",
+            expected: "Please ring number 5 now.",
+            mustKeep: ["number 5"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Please ring number 5"
+        ),
+        .init(
+            id: "number-call-not-an-item", category: .contextual,
+            spoken: "call number seven after lunch",
+            expected: "Call number 7 after lunch.",
+            mustKeep: ["number 7"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Call number 7"
+        ),
+        .init(
+            id: "number-check-not-an-item", category: .contextual,
+            spoken: "check number three again before we leave",
+            expected: "Check number 3 again before we leave.",
+            mustKeep: ["number 3"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Check number 3"
+        ),
+        .init(
+            id: "number-bus-not-an-item", category: .contextual,
+            spoken: "take bus number twelve to the station",
+            expected: "Take bus number 12 to the station.",
+            mustKeep: ["number 12"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Take bus number 12"
+        ),
+        .init(
+            id: "number-row-not-an-item", category: .contextual,
+            spoken: "my seat is row number eight near the window",
+            expected: "My seat is row number 8 near the window.",
+            mustKeep: ["number 8"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "My seat is row number 8"
+        ),
+        .init(
+            id: "number-invoice-not-an-item", category: .contextual,
+            spoken: "invoice number forty two is still unpaid",
+            expected: "Invoice number 42 is still unpaid.",
+            mustKeep: ["number 42"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Invoice number 42"
+        ),
+        .init(
+            id: "number-gate-not-an-item", category: .contextual,
+            spoken: "meet me at gate number nine after security",
+            expected: "Meet me at gate number 9 after security.",
+            mustKeep: ["number 9"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Meet me at gate number 9"
+        ),
+        .init(
+            id: "number-platform-not-an-item", category: .contextual,
+            spoken: "platform number four has the delayed train",
+            expected: "Platform number 4 has the delayed train.",
+            mustKeep: ["number 4"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Platform number 4"
+        ),
+        .init(
+            id: "number-flight-not-an-item", category: .contextual,
+            spoken: "flight number 447 is delayed again",
+            expected: "Flight number 447 is delayed again.",
+            mustKeep: ["number 447"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Flight number 447"
+        ),
+        .init(
+            id: "number-room-not-an-item", category: .contextual,
+            spoken: "room number 210 is free all afternoon",
+            expected: "Room number 210 is free all afternoon.",
+            mustKeep: ["number 210"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Room number 210"
+        ),
+        .init(
+            id: "number-press-not-an-item", category: .contextual,
+            spoken: "press number two to speak to someone",
+            expected: "Press number 2 to speak to someone.",
+            mustKeep: ["number 2"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Press number 2"
+        ),
+        .init(
+            id: "number-jersey-not-an-item", category: .contextual,
+            spoken: "jersey number ten scored twice",
+            expected: "Jersey number 10 scored twice.",
+            mustKeep: ["number 10"], context: numberedNotes,
+            destination: .document,
+            mustBeginWith: "Jersey number 10"
         ),
         .init(
             id: "spreadsheet-number-in-cell", category: .contextual,

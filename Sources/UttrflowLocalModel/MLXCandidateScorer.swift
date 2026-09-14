@@ -52,10 +52,15 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     /// Loads the weights from disk when they are whole there, downloading them only when they are not.
     public func prepare(onProgress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         guard container == nil else { return }
+        // The instruction warm-up is a pass like any other, so it is held to the cap and leaves nothing cached.
+        bufferCache.hold()
+        defer { bufferCache.clear() }
         let directory = try await model.weightsDirectory(
             cache: cache, downloader: { #hubDownloader() }, onProgress: onProgress)
         container = try await loadModelContainer(from: directory, using: #huggingFaceTokenizerLoader())
         warm = await warmInstructions()
+        prompt = await promptTokens(
+            addedTokens: AddedToken.read(fromTokenizerFile: directory.appending(path: "tokenizer.json")))
         vocabulary = await container?.perform { context in
             TokenHealing.Vocabulary(
                 tokenizer: context.tokenizer, endOfTurn: context.configuration.extraEOSTokens,
@@ -67,12 +72,28 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     public func release() {
         container = nil
         warm = nil
+        prompt = nil
         vocabulary = nil
         bufferCache.clear()
     }
 
     /// The instructions as the model has already read them, so a pass pays only for the moment's own tokens.
     private var warm: WarmInstructions?
+
+    /// The template's frame and the message's lines already tokenised, so a pass tokenises only the lines that changed.
+    private var prompt: PromptTokens?
+
+    /// Reads the template's frame once, or nothing when the tokenizer cannot promise lines tokenise alone as they do together.
+    private func promptTokens(addedTokens: [AddedToken]?) async -> PromptTokens? {
+        guard let container, let addedTokens else { return nil }
+        return await container.perform { context in
+            await PromptTokens(
+                addedTokens: addedTokens,
+                render: { try await Self.promptTokens(for: $0, context: context) },
+                encode: { context.tokenizer.encode(text: $0, addSpecialTokens: false) },
+                tokenText: { context.tokenizer.convertIdToToken($0) })
+        }
+    }
 
     /// Every token's text, read once, so a pass can hold the model to the word being typed.
     private var vocabulary: TokenHealing.Vocabulary?
@@ -106,6 +127,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
     private static func promptTokens(for message: String, context: ModelContext) async throws -> [Int] {
         let input = try await context.processor.prepare(
             input: UserInput(chat: [.system(instructions), .user(message)]))
+        precondition(input.text.tokens.ndim == 1, "the processor hands over one flat run of tokens")
         return input.text.tokens.asArray(Int32.self).map(Int.init)
     }
 
@@ -244,6 +266,7 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
         // With the machine's values to choose among, the whole line before the word opens the turn and the word is one of them.
         let choice = opening.flatMap { Self.choice(of: situation.choices, at: $0) }
         let warm = self.warm
+        let prompt = self.prompt
         let vocabulary = self.vocabulary
         let perLine = register.maxTokens
         let cap = maximumTokens
@@ -254,10 +277,15 @@ public actor MLXCandidateScorer: CandidateScoring, PassShowing, ReleasableModel 
                 var context = loaded
                 // The producer ends at the newline itself when one line is wanted, so no decode step is spent past it.
                 if let stop = ask.stopStrings { context.configuration.stopStrings = stop }
-                let input = try await context.processor.prepare(
-                    input: UserInput(chat: [.system(Self.instructions), .user(message)]))
-                precondition(input.text.tokens.ndim == 1, "the processor hands over one flat run of tokens")
-                var all = input.text.tokens.asArray(Int32.self).map(Int.init)
+                // The frame and the unchanged lines come from the cache; a message it cannot vouch for is tokenised whole.
+                var all: [Int]
+                if let known = prompt?.tokens(
+                    for: message, encode: { context.tokenizer.encode(text: $0, addSpecialTokens: false) })
+                {
+                    all = known
+                } else {
+                    all = try await Self.promptTokens(for: message, context: context)
+                }
                 // The line up to its last word opens the model's turn when one line is wanted, so decoding can only continue it.
                 let written = choice?.written ?? opening?.written ?? ""
                 if !written.isEmpty {

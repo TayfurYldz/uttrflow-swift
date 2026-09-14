@@ -51,7 +51,7 @@ has to be.
 | idle: menu bar only, windows closed, suggestions off | ~0% of a core; at most 2 timer wakeups a second from the app's own code | clipboard poll 4.8/s (#375) |
 | idle with tab-to-complete on | nothing beyond the line above once 12 s have passed with no keystroke, click or switch and nothing drawn | a 1 Hz tick for ever, each one an Accessibility read of the frontmost app (#374) |
 | typing, suggestions on | the tap callback does one atomic load; a turn per keystroke, coalesced to one running and one waiting; a model pass only after 120 ms of quiet, cancelled by the next key | as budgeted |
-| a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | user-initiated, ungated (#376); 0.65 processor-seconds per pass here, so ≈ 1.1 on M1 |
+| a model suggestion pass | at utility priority; none in Low Power Mode or at serious thermal pressure; ≤ 1 processor-second per pass on M1 | user-initiated, ungated (#376); 0.17 processor-seconds per pass here since #427, so ≈ 0.3 on M1 |
 | dictation | speech ≤ 0.1 processor-seconds per second of audio on M1; finished within 0.5× the audio's length on M1 | 0.04 here, which scales to ≈ 0.07; 0.20× wall clock here on a loaded machine |
 | animation | none continuous while nobody can see it; none decorative under Reduce Motion, Low Power Mode or serious thermal pressure | #359, #377 |
 
@@ -61,7 +61,10 @@ other builds, so wall-clock figures are pessimistic and processor-seconds are th
 - **Model pass.** `uttrflow-bakeoff complete --fixtures --model gemma3`, release build, under
   `/usr/bin/time -l`: 30 fixtures cost 22.96 processor-seconds and one cost 4.09, so each pass
   past the first is 0.65 processor-seconds and 11.3 G instructions, p50 784 ms. A debug build
-  costs twice that (1.28 s), which is why this row is measured in release.
+  costs twice that (1.28 s), which is why this row is measured in release. Re-measured for #427 on
+  14 September over all 1,154 fixtures, back to back at a load average up to 240: 1,086
+  processor-seconds with the prompt tokenised whole, 192 with `PromptTokens`, so 0.94 against 0.17 a
+  pass, p50 1,166 ms against 207 ms, and every fixture's lines identical.
 - **Speech.** `uttrflow-bakeoff profile --transcribe-only`, release: 0.15, 0.51 and 2.19
   processor-seconds for 3.4, 13.9 and 58.1 seconds of speech — 0.04 per second of audio, 0.27 G
   instructions per second of audio.
@@ -359,6 +362,48 @@ One thing the same run showed by accident: with the compile cache warm, loading 
 costs **5.68 processor-seconds at 0.98 cores** — a full core for six seconds. Cold it was
 0.15 cores for 148 seconds. The two are not the same event and averaging them would
 describe neither.
+
+### A suggestion pass's tokenizer
+
+A suggestion pass spent more processor time turning its prompt into tokens than running the
+model (#427). `sample` of a Release `uttrflow-bakeoff gpu-memory` run put 35% of all on-CPU
+samples in ICU's `RegexMatcher`, under `PreTrainedTokenizer.applyChatTemplate → encode →
+String.split(by:)`. The tokenizer splits text on its added tokens with one alternation regex
+before anything else, Gemma 3 declares 6,415 of them, and every pass rendered and tokenised the
+whole prompt — the fixed instructions, the screen, the person's lines — to add one typed
+character. Rendering the template itself, and building the message, are each under 1%.
+
+`PromptTokens` tokenises the template's frame once, when the model loads, and each line of the
+message once, keyed by its exact bytes; a pass pays only for the lines that changed. It is
+token-identical to the whole template because every break it cuts at is a hard boundary for
+this tokenizer: `\n` is an added token, every added token holding a line break is only line
+breaks, none swallows whitespace, and the frame's edges are added tokens no first or last
+character of the message can join. It checks each of those at load against `tokenizer.json`
+and probe messages, and a message it cannot vouch for is tokenised whole. `PromptTokensTests`
+holds it to the whole template over 3,000 random messages of boundary characters with the cache
+shared between them, and over Gemma 3's own tokenizer where it is on disk
+(`UTTRFLOW_TOKENIZER_PROOF=300`, run for #427, all identical). The keys are bytes because Swift
+calls the two spellings of "é" one string and the tokenizer does not; that test fails on a
+`String` key.
+
+Measured 14 September 2026 on the M5 Pro at a load average of 45–240 from other builds, so the
+processor figures are the ones to trust. One Release binary, the cache switched off by an
+environment variable that was never committed, 100 passes each, every fourth cancelled, one
+score a pass, two rounds:
+
+| harness | processor a pass, before → after | tokenising the prompt a pass | pass p50 / p95 |
+|---|---|---|---|
+| `gpu-memory --typing`: one reply typed a character a pass under one screen | 1.54 s, 1.93 s → 0.31 s, 0.32 s | 1,111 ms, 1,494 ms → 7 ms, 6 ms | 2,244 / 2,565 ms → 425 / 828 ms |
+| `gpu-memory`: a different screen every pass | 0.96 s, 0.92 s → 0.40 s, 0.38 s | 587 ms, 615 ms → 50 ms, 54 ms | 1,122 / 1,578 ms → 550 / 1,128 ms |
+
+Per 100 keystroke-turns that is about 150–190 processor-seconds before and 31 after. All 75
+completed passes of every run returned the same lines with the cache on and off, and the same
+as a build of `main` before the change.
+
+What is left is the score: `judgedTokens` tokenises the candidate twice, about 100 ms a pass
+through the same regex, and that is now the largest tokenizer cost. The regex is the dependency's;
+upstream it is huggingface/swift-transformers#383, with a fix open as #386, and nothing here
+patches or bumps it.
 
 ### The processor time that is not the app's
 
@@ -870,6 +915,27 @@ four `.mlmodelc` bundles and it pays that every time a recogniser is constructed
 recogniser must be constructed **once** and kept. It already is — `BackedSpeechEngine`
 loads once and guards it.
 
+## Reading a terminal line for its prompt
+
+`ShellPrompt.input` runs on the main actor each suggestion turn in a terminal, so its cost is
+bounded rather than left to the length of the line. It reads the line once, carrying forward
+what each terminator needs to know about the text before it, and looks for a prompt only in
+the first `ShellPrompt.searchLimit` (4,096) characters, since a prompt is short and a pasted
+line need not be. A terminator past that point is not taken for a prompt.
+
+Release build, a line of `ab# ` repeated, best of 20 runs (one run at 100 KB and over), on a
+machine at load average 100 to 275, so the old column is inflated and its growth is not:
+
+| line | before | after |
+|---|---|---|
+| 1 KB | 0.32 ms | 0.05 ms |
+| 10 KB | 27 ms | 0.20 ms |
+| 100 KB | 15.3 s | 0.37 ms |
+| 1 MB | not run (quadratic, extrapolated at about 25 minutes) | 0.36 ms |
+
+`ShellPromptScalingTests` counts characters read through `ShellPrompt.tally` rather than
+timing: the previous reading took 2,004,000 reads for a 4,000-character line.
+
 ## Disk
 
 ```
@@ -882,6 +948,40 @@ The model is measured on disk (645.7 MB across 4 `.mlmodelc` bundles plus two JS
 files), not taken from the catalogue. The application is the signed bundle from
 `make app`. A fresh install is therefore **660 MB**, of which 98% is the speech model
 and all of it is downloaded on first launch rather than shipped.
+
+## Showing what a formatter changed
+
+The formatting sheet diffs the clip against the formatter's output once per presentation, on
+the main actor, and a kept clip may be 2 MB. `TextDiff` finds the fewest changed lines with a
+edit-distance search over layers of furthest-reaching points, as in the O(n × d) algorithm,
+whose memory grows with the changes rather than with the product of the two texts' lengths. It
+then walks from the top choosing at each change exactly what the full table did: equal lines
+first, and a removal before an addition whenever both are shortest. The walk needs the layers
+deepest first, so every 32nd layer is kept and each stretch of 32 is rebuilt from it. That
+costs about one more pass, and the kept layers grow with the square of the changes, about
+d² / 64 integers: 2 MB at the 4,000-change limit. Every public entry point goes through that
+limit.
+
+`TextDiff.compare` refuses up front a text over 20,000 lines or 1 MB, and stops looking past
+4,000 changed lines; the sheet then states both line counts instead of a diff.
+
+Release build, best single run, peak footprint from `/usr/bin/time -l`, on a machine at load
+average 80 to 250. "Every line" indents all of them, "one in fifty" indents every fiftieth:
+
+| lines | shape | before | after |
+|---|---|---|---|
+| 100 | every line | 0.3 ms, 2.0 MB | 0.8 ms, 2.1 MB |
+| 1,000 | every line | 12 ms, 10.6 MB | 13 ms, 6.9 MB |
+| 1,999 | every line, 3,998 changes | 42 ms, 36 MB | 53 ms, 12.7 MB |
+| 5,000 | every line | 1.16 s, 308 MB | 34 ms, 6.9 MB, too large |
+| 20,000 | every line | 9.9 s, 3.9 GB | 38 ms, 14 MB, too large |
+| 1,000 | one in fifty | 9.8 ms, 10.3 MB | 0.6 ms, 2.3 MB |
+| 5,000 | one in fifty | 231 ms, 341 MB | 3.0 ms, 3.5 MB |
+| 20,000 | one in fifty | 7.3 s, 4.1 GB | 14 ms, 10 MB |
+
+Both columns are what one sheet costs: before, that was two runs of the table.
+`TextDiffScalingTests` counts steps through `TextDiff.tally` rather than timing, and compares
+the diff with the table on 20,000 random small pairs.
 
 ## Suggestions under Low Power Mode and thermal pressure
 
@@ -902,6 +1002,170 @@ It is also discretionary: the corpus still offers what it remembers without it. 
 
 Scoring a remembered candidate is left as it was: it is one forward pass, raced against a deadline,
 and slowing it would turn a slow answer into a refused candidate.
+
+## Dictation end to end: the words and the wait
+
+`uttrflow-dev bench` plays clips through `DictationPipeline` exactly as a held key would — the
+shipping router, early transcription, the piece joiner — and prints one JSON line per dictation:
+the text, how long the wait after key-up was, each recognition and each tidy with its own start
+and end, processor seconds, and the peak footprint sampled every 20 ms.
+`Scripts/dictation_bench.py` builds the corpus, writes the jobs and scores a run. Everything
+below is one run of the commands under [re-running it](#re-running-it), taken on
+**14 September 2026** at `1cfd688`, Release build, the same M5 Pro, load average 6–30.
+
+**One process loads the recogniser once and plays every clip.** Separate processes, one per clip,
+stall each other: every one of them compiles for the Neural Engine at the same moment, and a
+freshly built binary does not inherit the compiled copy — 205 s for this run's first load, and
+527–882 s on the same day under a load average of 100–200. `uttrflow-dev dictate` is one clip per
+process, which is why it cannot run a corpus.
+
+**The corpus is synthetic and invented.** `say` voices for US, UK and Indian English and for
+Hindi; 139 clips and 30.6 minutes of speech: replies of one to four words, passages of 5 s to
+2 min (with a 0.9 s breath every third sentence from 30 s up, and one 60 s passage without), numbers,
+email addresses on `example.com`, code identifiers, invented proper nouns with and without a
+vocabulary, Hinglish read in the Latin alphabet, spoken punctuation, self-corrections, the committed
+`TranscriptionCorpus` passages, and ten clips again with brown noise at 20 and 10 dB SNR, 24 dB
+quieter and 12 dB hotter (clipping). No recording of a person is involved.
+
+**Two word error rates.** *Raw* is the recogniser's pieces joined, against what was said; *final*
+is the inserted text, against what should be typed. Both lower-case, drop punctuation, spell
+numerals, and split identifiers and addresses into words, so "3.5%" and "three point five percent"
+agree; neither sees capitals or punctuation. Hindi is scored against the Devanagari passage and the
+romanised one, whichever is closer.
+
+### Word error rate
+
+Each clip run all at once, with the shipping router.
+
+| category | clips | raw | final |
+|---|---|---|---|
+| replies, 1–4 words | 14 | 0.0% | 0.0% |
+| 5 s | 3 | 0.0% | 0.0% |
+| 15 s | 3 | 2.5% | 2.5% |
+| 30 s | 3 | 2.9% | 2.9% |
+| 60 s | 4 | 1.0% | 1.0% |
+| 120 s | 3 | 0.5% | 0.5% |
+| numbers | 4 | 6.0% | 6.0% |
+| email addresses | 3 | 2.2% | 2.2% |
+| code identifiers | 4 | 0.0% | 1.7% |
+| spoken punctuation | 3 | 16.7% | 9.5% |
+| self-corrections | 4 | 2.3% | 0.0% |
+| invented names, no vocabulary | 9 | 28.1% | 28.1% |
+| invented names, in the vocabulary | 9 | 0.0% | 0.0% |
+| `TranscriptionCorpus`, English | 18 | 2.8% | 3.1% |
+| `TranscriptionCorpus`, Hindi | 6 | 9.0% | 9.0% |
+| `TranscriptionCorpus`, Hinglish | 6 | 33.9% | 33.9% |
+| Hinglish read in the Latin alphabet | 3 | 169.8% | 62.8% |
+
+| voice | clips | raw | final |
+|---|---|---|---|
+| US English | 31 | 2.1% | 2.2% |
+| UK English | 27 | 2.3% | 2.4% |
+| Indian English | 26 | 3.5% | 3.3% |
+
+| audio, over the same ten clips | raw | final |
+|---|---|---|
+| as synthesised | 2.4% | 2.4% |
+| brown noise, 20 dB SNR | 2.1% | 2.1% |
+| brown noise, 10 dB SNR | 2.7% | 2.9% |
+| 24 dB quieter | 2.9% | 2.9% |
+| 12 dB hotter, clipping | 3.4% | 3.4% |
+
+What the rows say, read against the clips rather than the percentages:
+
+- **A vocabulary is worth what it costs.** Invented names go from 28% to none wrong when they are
+  in the prompt. The cost is below.
+- **Hinglish loses to the alphabet, not to the words.** The recogniser writes Hinglish in
+  Devanagari, "deploy" and "issue" included, so a Latin-alphabet reference scores it as nearly all
+  wrong while the words are right. The tidier romanises it when Apple's model accepts the passage,
+  which takes 170% to 63%; it declines most Hindi passages outright, which is issue 445.
+- **Numbers and names are the English errors.** "4,250 dollars and 75 cents" is written "$4,250.75"
+  (fair, but counted); "Jaxvale" becomes "Jack's Vale". Code identifiers are written as the
+  recogniser chose to join them; "src" is heard as "source".
+- **Noise barely registers** at these levels on synthetic speech. One exception is a pattern
+  rather than a rate: "Ship it" at 10 dB SNR came back "Shit is." in one run and as nothing in
+  the next, on the same audio.
+- **The tidier changed the words of 2 of 120 English clips.** It removed a stray quotation mark
+  the recogniser left, and turned "thick" into "theek" in a noisy clip. A third clip differed
+  because the recogniser heard it differently on the two runs (the "Ship it" above). Every other
+  English dictation came out identical to the rules pinned alone, which is what issue 447 acts on
+  for replies.
+
+### The wait
+
+**All at once** hands the whole file over and releases the key: every piece is recognised and
+tidied after key-up, which is what a retry does and the worst case for a dictation. **Real time**
+plays the file at speaking pace, so early transcription works ahead while the key is held. The wait
+is key-up to the words being ready; recognising and tidying are each dictation's total across all
+its pieces, early ones included, so in real time they can exceed the wait.
+
+| | clips | speech | wait p50 | wait p95 | first piece tidied while held, p50 | recognising p50 | tidying p50 | processor s per speech s | peak footprint |
+|---|---|---|---|---|---|---|---|---|---|
+| replies, all at once | 14 | 0.8 s | 1.07 s | 2.40 s | — | 0.56 s | 0.50 s | 0.110 | 362 MB |
+| replies, rules only | 14 | 0.8 s | 0.60 s | 0.69 s | — | 0.60 s | 0.00 s | 0.080 | 362 MB |
+| 5 s, all at once | 3 | 5.1 s | 1.06 s | 1.14 s | — | 0.57 s | 0.49 s | 0.035 | 258 MB |
+| 15 s, all at once | 3 | 16.8 s | 3.56 s | 4.53 s | — | 1.25 s | 2.31 s | 0.031 | 258 MB |
+| 30 s, all at once | 3 | 31.5 s | 8.41 s | 9.30 s | — | 4.07 s | 6.56 s | 0.030 | 219 MB |
+| 60 s, all at once | 4 | 58.4 s | 10.83 s | 12.25 s | — | 7.45 s | 9.99 s | 0.029 | 255 MB |
+| 120 s, all at once | 3 | 116.2 s | 19.94 s | 22.38 s | — | 15.90 s | 18.47 s | 0.030 | 270 MB |
+| replies, real time | 14 | 0.8 s | 1.67 s | 3.91 s | — | 0.75 s | 0.79 s | 0.147 | 229 MB |
+| 5 s, real time | 3 | 5.1 s | 1.58 s | 2.41 s | — | 0.61 s | 0.97 s | 0.039 | 229 MB |
+| 15 s, real time | 3 | 16.8 s | 2.99 s | 3.68 s | — | 1.29 s | 1.70 s | 0.034 | 228 MB |
+| 30 s, real time | 3 | 31.5 s | 1.93 s | 3.39 s | 16.9 s | 3.10 s | 3.91 s | 0.035 | 229 MB |
+| 60 s, real time | 4 | 58.4 s | 2.75 s | 7.38 s | 17.6 s | 6.32 s | 7.19 s | 0.034 | 287 MB |
+| 120 s, real time | 3 | 116.2 s | 2.03 s | 2.19 s | 15.1 s | 9.79 s | 12.70 s | 0.034 | 372 MB |
+
+- **Early transcription holds the wait near two seconds from 30 s up.** All at once, a two-minute
+  dictation waits 20 s; spoken, 2 s. The 15 s passages have no breath long enough to cut at, so
+  they are one piece and wait for all of it.
+- **For a short dictation the tidier is half the wait.** A reply recognises in about 0.56 s and
+  then waits about 0.5 s more for Apple's model, which returned the rules' answer on every reply
+  measured. Issue 447.
+- **Processor time is 0.03 s per second of speech** for anything over five seconds, inside the
+  0.1 budget above. A reply costs more per second (0.11) because the encoder always reads a full
+  30-second window.
+- **Peak footprint stays under 400 MB**, the dictation budget above; the highest was 372 MB, during
+  a two-minute real-time dictation.
+
+### What the recognising time is made of
+
+WhisperKit measures its own stages and reports them in `TranscriptionResult.timings`. Read with a
+temporary print over 528 decodes of the same corpus, not part of the harness:
+
+- **Decoder steps are about four fifths of it**, one Neural Engine call per token, 20 ms each on a
+  quiet machine and 37 ms under a load average of 100–200. The encoder is about a sixth, roughly
+  0.28 s per 30-second window.
+- **Everything on the processor around the steps is under 5%** together: the key-value cache copy,
+  logits filtering, sampling and word timestamps.
+- **The temperature fallback never fired** in 528 decodes, so the fallback settings cost nothing on
+  this corpus and cannot be tuned against it.
+- **A vocabulary costs one decoder step per prompt token, every piece.** Four or five invented names
+  are 20–26 tokens and took the median recognition of a 4.6 s clip from 1.61 s to 2.50 s under load;
+  at 20 ms a step a full 111-token prompt is about 2.2 s more for every piece, before the first word.
+
+### Launch
+
+| | seconds | processor seconds | footprint once loaded |
+|---|---|---|---|
+| first load of a freshly built binary, load average 8–80 | 205–254 | 25–26 | 156–222 MB |
+| a later process, compiled copy cached, WhisperKit's prewarm on (shipping) | 2.2–2.5 | 2.2 | 109 MB |
+| the same without prewarm | 1.2–1.3 | 1.2 | 95 MB |
+
+The first dictation after a warm launch waited 1.05 s against 1.02–1.03 s for the next two, so
+prewarm buys nothing a warm launch can see. What it buys on a cold one — WhisperKit prewarms to
+keep the compile's peak memory down — was not measured, so it stays on.
+
+### Measured and not taken
+
+- **The GPU for the encoder and decoder.** Recognition was about 30% faster (a 15 s clip 0.95 s
+  against 1.33 s) and the footprint was **3.4 GB** against 250 MB, with a first recognition after
+  launch of 2.4–8.1 s while shaders warmed. Twelve times the memory budget on an 8 GB Mac.
+- **Skipping Apple's model for longer dictations.** Identical to the rules on 117 of 120 synthetic
+  English clips, and that tidier time is most of the all-at-once wait. Synthetic speech has none of
+  the pauses, fillers and slips a person's does, so this is not evidence that real dictation would
+  come out the same; it wants the recorded corpus.
+- **A shorter vocabulary prompt.** The cost above is real and so is the accuracy it buys; trading
+  one for the other wants measuring on vocabularies of the size people keep.
 
 ## What these numbers are not
 
@@ -954,6 +1218,7 @@ make bakeoff ARGS="profile --app dist/Uttrflow.app"   # include the bundle in th
 make bakeoff ARGS="profile --dictations 30"          # a longer leak check
 make bakeoff ARGS="profile --transcribe-only"        # transcription without the clean-up pass
 make bakeoff ARGS="gpu-memory --passes 40"           # the suggestion model's GPU memory, pass by pass
+make bakeoff ARGS="gpu-memory --typing --show"       # processor a pass while a reply is typed, and every line
 ```
 
 The speech model must already be installed (`uttrflow-dev models install`). Audio is
@@ -963,3 +1228,21 @@ re-spoken, so a stale clip can never be reported under a changed passage.
 Every figure printed is read off a `PerformanceReport` built by `PerformanceProfiler` in
 `UttrflowEval`, where the phase order, the leak rules and the scaling verdict are covered
 by tests. `uttrflow-bakeoff` contributes the arguments, the audio and the table.
+
+The end-to-end word error rate and wait, as in [the section above](#dictation-end-to-end-the-words-and-the-wait):
+
+```
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+swift build -c release --product uttrflow-dev
+python3 Scripts/dictation_bench.py corpus                                  # .build/bench, about a minute
+python3 Scripts/dictation_bench.py jobs --cleaners shipping,rules > .build/bench/jobs-fast.tsv
+python3 Scripts/dictation_bench.py jobs --mode rt --clean-only \
+    --categories reply,dur5,dur15,dur30,dur60,dur120 > .build/bench/jobs-rt.tsv
+cat .build/bench/jobs-fast.tsv .build/bench/jobs-rt.tsv > .build/bench/jobs.tsv
+.build/release/uttrflow-dev bench .build/bench/jobs.tsv > .build/bench/run.out
+python3 Scripts/dictation_bench.py score .build/bench/run.out
+```
+
+The corpus names each clip's audio by its voice and words, so changing either speaks it again. Run one `bench` at a time: two processes compete for the Neural Engine and each other's compile.
+The run above took about half an hour, its first load included.
+

@@ -4,7 +4,7 @@ public struct Register: Sendable, Equatable {
     public let isMultiline: Bool
     /// About how long this person's lines here are, in characters, or the screen's lines in a conversation.
     public let typicalLength: Int?
-    /// Whether the screen shows a back-and-forth of short turns, which the line is then a reply in.
+    /// Whether the screen shows people taking turns, by name or by timestamp beside a message box, which the line is then a reply in.
     public let isConversational: Bool
     /// The share of the characters here that are neither letters, digits nor spaces: high for commands, code and queries.
     public let symbolShare: Double
@@ -44,7 +44,7 @@ public struct Register: Sendable, Equatable {
     /// Reads the register off one moment: the field, what is on screen, what the person wrote here, what is typed.
     public static func infer(from situation: GenerationSituation, typed: String) -> Register {
         let screenLines = lines(of: situation.surroundings)
-        let conversational = isConversation(screenLines)
+        let conversational = isConversation(screenLines, field: situation.field)
         let own = situation.recentLines
         let typical = median(own.map(\.count)) ?? (conversational ? median(screenLines.map(\.count)) : nil)
         return Register(
@@ -147,12 +147,70 @@ public struct Register: Sendable, Equatable {
         }
     }
 
-    /// Whether the lines read as turns of a conversation: several of them, and mostly short.
-    static func isConversation(_ lines: [String]) -> Bool {
+    /// Whether the lines read as turns of a conversation: several short lines shaped as turns, never a page's short menu, link or button lines.
+    static func isConversation(_ lines: [String], field: String? = nil) -> Bool {
         guard lines.count >= conversationLines else { return false }
         let short = lines.filter { $0.count < conversationLineLength }.count
-        return Double(short) / Double(lines.count) >= 0.6
+        guard Double(short) / Double(lines.count) >= 0.6 else { return false }
+        return hasSpeakerTurns(lines)
+            || (namesMessageComposer(field) && lines.filter(showsClockTime).count >= timedTurns)
     }
+
+    /// A message composer's screen needs at least this many lines stamped with a time of day before it reads as a conversation.
+    public static let timedTurns = 2
+
+    /// Whether the lines open with speakers taking turns: enough of them, at least two people, and someone speaking twice.
+    static func hasSpeakerTurns(_ lines: [String]) -> Bool {
+        let speakers = lines.compactMap(speaker)
+        let distinct = Set(speakers)
+        return speakers.count >= conversationLines && distinct.count >= 2 && distinct.count < speakers.count
+    }
+
+    /// The name a line opens with before a colon, as in "Priya: on my way" or "Neha (PM): confirmed", or nothing when it opens with words or a time.
+    static func speaker(of line: String) -> String? {
+        guard let colon = line.firstIndex(of: ":") else { return nil }
+        let after = line.index(after: colon)
+        guard after == line.endIndex || line[after].isWhitespace else { return nil }
+        let label = line[..<colon].trimmingCharacters(in: .whitespaces)
+        guard let first = label.first, first.isLetter, label.count <= speakerLength,
+            label.split(separator: " ").count <= speakerWords,
+            label.allSatisfy({ $0.isLetter || $0.isNumber || " ()._-'".contains($0) })
+        else { return nil }
+        return label
+    }
+
+    /// The longest a speaker's name may run, in characters, before the text before a colon reads as a sentence.
+    static let speakerLength = 32
+
+    /// The most words a speaker's name may have, so "Steps to reproduce the crash:" is not a person.
+    static let speakerWords = 3
+
+    /// Whether the field's own accessibility name says it composes a message, as chat composers publish ("Message", "Type a message", "Message #platform"), never a mail's body or subject.
+    static func namesMessageComposer(_ name: String?) -> Bool {
+        guard let name = name?.lowercased() else { return false }
+        return (name.contains("message") || name.contains("chat"))
+            && !name.contains("body") && !name.contains("subject")
+    }
+
+    /// Whether the line shows a time of day, "6:38 PM" or "10:31", which is how a chat stamps each message.
+    static func showsClockTime(_ line: String) -> Bool {
+        let characters = Array(line)
+        for index in characters.indices where characters[index] == ":" {
+            var hours = 0
+            while hours < 3, index - hours - 1 >= 0, isDigit(characters[index - hours - 1]) { hours += 1 }
+            var minutes = 0
+            while minutes < 3, index + minutes + 1 < characters.count,
+                isDigit(characters[index + minutes + 1])
+            {
+                minutes += 1
+            }
+            if (1...2).contains(hours), minutes == 2 { return true }
+        }
+        return false
+    }
+
+    /// Whether the character is one of the ASCII digits a clock is written in.
+    private static func isDigit(_ character: Character) -> Bool { ("0"..."9").contains(character) }
 
     /// The middle value, or nothing for no values at all.
     static func median(_ values: [Int]) -> Int? {

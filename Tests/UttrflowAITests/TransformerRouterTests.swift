@@ -137,6 +137,88 @@ struct TransformerRouterTests {
         }
     }
 
+    /// A request for `text`, its words scored `confidence` when given, the way the recogniser reports them.
+    private func spoken(_ text: String, confidence: Double? = nil) -> TransformationRequest {
+        let words = confidence.map { score in
+            text.split(separator: " ").map { TranscribedWord(text: String($0), confidence: score) }
+        }
+        let segments = words.map {
+            [TranscriptionSegment(text: text, start: .zero, end: .seconds(1), words: $0)]
+        }
+        return TransformationRequest(
+            transcription: Transcription(text: text, segments: segments ?? [], audioDuration: .seconds(1)))
+    }
+
+    /// The model's stand-in and the floor, routed the way the shipping build routes them.
+    private func shipping() -> (model: StubTransformer, floor: StubTransformer, router: TransformerRouter) {
+        let model = StubTransformer(kind: .foundationModels)
+        let floor = StubTransformer(kind: .rules)
+        let router = TransformerRouter(
+            engines: [model, floor], preference: [.foundationModels, .rules], rulesAlone: .shortReplies)
+        return (model, floor, router)
+    }
+
+    @Test(
+        "hands a short, certain reply straight to the rules",
+        arguments: ["Okay.", "Ship it.", "See you tomorrow."])
+    func shortReplyGoesToRules(text: String) async throws {
+        let (model, _, router) = shipping()
+
+        let result = try await router.transform(spoken(text, confidence: 0.9))
+
+        #expect(result.producedBy == .rules)
+        #expect(model.transformCount == 0, "the model must not be asked for words the rules finish")
+    }
+
+    @Test("still asks the model for a reply one word longer than the limit")
+    func longerReplyGoesToModel() async throws {
+        let (model, _, router) = shipping()
+
+        #expect(try await router.transform(spoken("Can you call me?")).producedBy == .foundationModels)
+        #expect(model.transformCount == 1)
+    }
+
+    @Test("still asks the model for a short reply in Devanagari, which it romanises")
+    func devanagariGoesToModel() async throws {
+        let (_, _, router) = shipping()
+
+        #expect(try await router.transform(spoken("हाँ ठीक है")).producedBy == .foundationModels)
+    }
+
+    @Test("still asks the model when the recogniser doubted a word, since choosing a reading is its job")
+    func doubtedWordGoesToModel() async throws {
+        let (_, _, router) = shipping()
+
+        #expect(
+            try await router.transform(spoken("ship payment sheet", confidence: 0.2)).producedBy
+                == .foundationModels)
+    }
+
+    @Test("sends nothing past the model when the rules are not on the route")
+    func pinnedRouteIsKept() async throws {
+        let model = StubTransformer(kind: .foundationModels)
+        let router = TransformerRouter(
+            engines: [model], preference: [.foundationModels], rulesAlone: .shortReplies)
+
+        #expect(try await router.transform(spoken("Ship it.")).producedBy == .foundationModels)
+    }
+
+    @Test("sends a blank request down the whole route")
+    func blankRequestTakesTheRoute() async throws {
+        let (_, _, router) = shipping()
+
+        #expect(try await router.transform(spoken("  ")).producedBy == .foundationModels)
+    }
+
+    @Test("sends every request down the whole route unless told otherwise")
+    func defaultTakesTheRoute() async throws {
+        let model = StubTransformer(kind: .foundationModels)
+        let router = TransformerRouter(
+            engines: [model, StubTransformer(kind: .rules)], preference: [.foundationModels, .rules])
+
+        #expect(try await router.transform(spoken("Ship it.")).producedBy == .foundationModels)
+    }
+
     @Test("builds its order from a stored configuration")
     func fromConfiguration() {
         let router = TransformerRouter(
@@ -169,6 +251,12 @@ struct TextTransformersTests {
     @Test("routes to the floor last")
     func floorIsLast() {
         #expect(TextTransformers.router().route.last == .rules)
+    }
+
+    @Test("leaves replies of three words or fewer to the rules")
+    func shipsShortReplies() {
+        #expect(TextTransformers.router().rulesAlone == .shortReplies)
+        #expect(RulesAlone.shortReplies.mostWords == 3)
     }
 }
 
@@ -219,7 +307,7 @@ struct PromptContractTests {
 }
 
 /// One engine's allowance is its own, so a hang cannot spend the floor's turn.
-@Suite("Each engine's own allowance")
+@Suite("Each engine's own allowance", .timeLimit(.minutes(1)))
 struct TransformerBudgetTests {
     /// A fixture request.
     private let request = TransformationRequest(transcription: .fixture())
