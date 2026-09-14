@@ -22,6 +22,16 @@ struct GPUMemory: AsyncParsableCommand {
         help: "Release the model after the idle reading, report what is left, then time loading it again.")
     var release = false
 
+    @Flag(
+        name: .long,
+        help:
+            "Type one reply a character a pass under one screen of messages, as passes arrive while somebody types."
+    )
+    var typing = false
+
+    @Flag(name: .long, help: "Print each pass's completions, so two builds can be compared line for line.")
+    var show = false
+
     @Option(name: .long, help: "Which model to run, by repository or short name.")
     var model = LocalModel.gemma3.identifier
 
@@ -38,14 +48,20 @@ struct GPUMemory: AsyncParsableCommand {
         try await scorer.prepare()
         print("loaded                    \(Self.row(GPUBufferCache.reading))")
         var times: [Int] = []
+        var processor: [Int] = []
         for pass in 1...passes {
             let cancelled = cancelEvery > 0 && pass % cancelEvery == 0
-            let elapsed = await Self.measure(pass: pass, cancelled: cancelled, with: scorer)
+            let before = Self.processorMilliseconds()
+            let (elapsed, lines) = await Self.measure(
+                pass: pass, cancelled: cancelled, typing: typing, with: scorer)
+            let spent = Self.processorMilliseconds() - before
+            processor.append(spent)
             if !cancelled { times.append(elapsed) }
             let kind = cancelled ? "cancelled" : "complete "
             let label =
                 "pass \(String(pass).leftPadded(to: 3)) \(kind) \(String(elapsed).leftPadded(to: 5)) ms"
-            print("\(label)  \(Self.row(GPUBufferCache.reading))")
+            print("\(label)  cpu \(String(spent).leftPadded(to: 5)) ms  \(Self.row(GPUBufferCache.reading))")
+            if show, !cancelled { print("  " + lines.debugDescription) }
         }
         try? await Task.sleep(for: .seconds(5))
         print("idle 5 s                  \(Self.row(GPUBufferCache.reading))  \(Self.footprint())")
@@ -63,27 +79,48 @@ struct GPUMemory: AsyncParsableCommand {
         let sorted = times.sorted()
         guard !sorted.isEmpty else { return }
         print(
-            "complete passes: median \(sorted[sorted.count / 2]) ms, mean \(sorted.reduce(0, +) / sorted.count) ms"
+            "complete passes: median \(sorted[sorted.count / 2]) ms, p95 \(sorted[sorted.count * 95 / 100]) ms, mean \(sorted.reduce(0, +) / sorted.count) ms"
+        )
+        print(
+            "processor: \(processor.reduce(0, +) / processor.count) ms a pass over all \(processor.count) passes"
         )
     }
 
-    /// One generation pass, cancelled part-way when asked, then one score; returns the milliseconds both took.
-    private static func measure(pass: Int, cancelled: Bool, with scorer: MLXCandidateScorer) async -> Int {
+    /// Processor time this process has spent on every thread, in milliseconds.
+    private static func processorMilliseconds() -> Int {
+        Int(clock_gettime_nsec_np(CLOCK_PROCESS_CPUTIME_ID) / 1_000_000)
+    }
+
+    /// One generation pass, cancelled part-way when asked, then one score; returns the milliseconds both took and the lines generated.
+    private static func measure(
+        pass: Int, cancelled: Bool, typing: Bool, with scorer: MLXCandidateScorer
+    ) async -> (Int, [String]) {
         let situation = GenerationSituation(
             application: "Mail", windowTitle: "Re: planning",
-            surroundings: thread(words: 120 + pass * 37 % 190),
+            surroundings: typing ? screen : thread(words: 120 + pass * 37 % 190),
             isMultiline: true)
-        let typed = openings[pass % openings.count] + String(repeating: "and then ", count: pass % 5)
+        let typed =
+            typing
+            ? String(reply.prefix(12 + pass % (reply.count - 12)))
+            : openings[pass % openings.count] + String(repeating: "and then ", count: pass % 5)
         let started = ContinuousClock.now
         let work = Task { try await scorer.completions(for: typed, in: situation) }
         if cancelled {
             try? await Task.sleep(for: .milliseconds(40 + pass * 13 % 120))
             work.cancel()
         }
-        _ = try? await work.value
+        let lines = (try? await work.value) ?? []
         _ = await scorer.judgedTokens(of: typed + thread(words: 4 + pass % 23), following: typed)
-        return Int((ContinuousClock.now - started) / .milliseconds(1))
+        return (Int((ContinuousClock.now - started) / .milliseconds(1)), lines)
     }
+
+    /// One screen of short messages, the same for every pass of a typed reply.
+    private static let screen = (0..<14).map { "Sam: " + thread(words: 6 + $0 * 5 % 9) }.joined(
+        separator: "\n")
+
+    /// The reply typed a character a pass.
+    private static let reply =
+        "Thanks for sending the draft over, I will check whether the venue can hold everyone and send the agenda early next week"
 
     /// The process's footprint, which is what Activity Monitor shows.
     private static func footprint() -> String {
