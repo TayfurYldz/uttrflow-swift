@@ -22,6 +22,56 @@ calls.
 6. A payment card number (below).
 7. The statistical rule below.
 
+## Reading in linear time
+
+Every copy is read for a credential inside the pasteboard watcher's loop, before the next copy
+can be noticed, so the reading has to cost time in proportion to the clip. Three of the shapes
+above were once backtracking patterns that reread the rest of a run from every place a match
+could start: the JWT (`eyJ` in a long base64url run), the connection string (every letter in a
+run of scheme characters) and the named secret (every keyword in `pwd=pwd=…`). A 16 KB line of
+hex took seconds, and each doubling of its length cost four times as long.
+
+They are now single-pass readers in `SecretScanners.swift` that accept exactly what the patterns
+did, character for character: ASCII classes match only a lone ASCII scalar, `\s` is
+`Character.isWhitespace`, `$` stands before any `Character.isNewline`, a case-insensitive `k`
+also matches U+212A KELVIN SIGN, and `\b` is the Unicode word boundary the pattern engine uses.
+`SecretShapesOracleTests` keeps the old patterns as the oracle and compares them with the readers
+on 200,000 random strings and on planted secrets. `SecretShapesScalingTests` bounds the
+characters read per character of the clip, so the check is a count, not a clock.
+
+The same pass found four classifier patterns with the same flaw, rewritten as patterns that
+accept the same language without the backtracking: a link's host (`[^\s/?#]+\S*` is
+`[^\s/?#]\S*`), a functional colour (`\(\s*[^()]+\)` is `\([^()]+\)`), a call
+(`\w+\((?:\)|[^\s)])` is `\w\(\S`), and every line-start rule in `CodeShapes`, where `^\s*`
+could run through a block of blank lines from each of them and `^\h*` cannot.
+
+## Reading a large clip cheaply
+
+Linear was not yet cheap: the vendor-key pattern cost about 0.7 s a megabyte and the card-number
+pattern 0.2 s, on every copy up to the 2 MB clip bound. Every byte of a clip is still read for a
+credential, and the answer is still exactly the patterns' answer; what changed is how much of the
+clip each pattern is handed. `PatternWindows.swift` holds the pieces.
+
+- **A literal in the bytes first.** Every character a pattern matches as ASCII is that ASCII byte,
+  so a clip whose bytes lack `-----BEGIN`, `eyJ` or `://` cannot hold a PEM header, a JWT or a
+  connection string, and those readers are skipped. The named-secret reader runs only when the
+  bytes hold `:` or `=` and a stem of one of its names (`api`, `secret`, `token`, `pass`, `pwd`,
+  `credential`, `private`, `access`, `auth`, `client`), with `token`'s `k` also read as U+212A.
+- **The vendor-key pattern on windows.** It runs only where one of its literal prefixes starts,
+  on the 128 characters from there. Its longest shortest match is 47 characters, so a window
+  decides every prefix more than 48 characters before its end, and those are not read again.
+  SendGrid's first segment has no longest length, so its window runs to the end of the token.
+- **The card-number pattern on runs.** It runs only over runs of digits, spaces and hyphens that
+  hold at least thirteen digits, the fewest any grouping has, cut at character boundaries so a
+  digit carrying a combining mark stays a non-digit.
+- **ASCII clips byte for byte.** The statistical rule and the shell-command rule read an ASCII
+  clip's bytes as its characters, which they are.
+
+`ClipKindOracleTests` keeps the whole-clip reading as the oracle and compares it on 50,000 random,
+planted and realistic clips; `ClipClassifyScalingTests` bounds the characters handed to the two
+patterns by the number of prefixes and runs, not the clip's length. The before and after are in
+`Docs/performance.md`.
+
 ## The entropy floor: 3.8 bits per character
 
 Applies to single words on one-line clips only (a multi-line clip is a document and

@@ -493,6 +493,121 @@ struct DictationControllerRebindTests {
     }
 }
 
+/// Changing the activation mode in Settings while a dictation is recording.
+@Suite("Changing the activation mode while recording")
+struct DictationControllerModeChangeTests {
+    @Test("switching from hold to toggle mid-hold finishes the recording and keeps the words")
+    func holdToToggleFinishesTheHold() async {
+        let harness = makeHarness(activation: .holdToTalk)
+        await harness.controller.handle(.pressed)
+        harness.clock.advance(by: .seconds(3))
+
+        await harness.controller.setActivation(.pressToToggle)
+
+        #expect(await !harness.pipeline.currentState.isListening, "the microphone is closed")
+        #expect(harness.inserter.received == [controllerTidied], "finished, not cancelled")
+        #expect(await harness.capture.calls.events == [.start, .stop])
+
+        await harness.controller.handle(.released)
+        #expect(await harness.capture.calls.events == [.start, .stop], "the late release opens nothing")
+    }
+
+    @Test("switching from toggle to hold while toggled on finishes the recording")
+    func toggleToHoldFinishesTheToggle() async {
+        let harness = makeHarness(activation: .pressToToggle)
+        await harness.controller.handle(.pressed)
+        await harness.controller.handle(.released)
+        harness.clock.advance(by: .seconds(3))
+
+        await harness.controller.setActivation(.holdToTalk)
+
+        #expect(await !harness.pipeline.currentState.isListening, "the microphone is closed")
+        #expect(harness.inserter.received == [controllerTidied])
+        #expect(await harness.capture.calls.events == [.start, .stop])
+    }
+
+    @Test("switching from toggle to hold with the key still down finishes once, and the release adds nothing")
+    func toggleToHoldWithTheKeyDown() async {
+        let harness = makeHarness(activation: .pressToToggle)
+        await harness.controller.handle(.pressed)
+        harness.clock.advance(by: .seconds(3))
+
+        await harness.controller.setActivation(.holdToTalk)
+        await harness.controller.handle(.released)
+
+        #expect(await !harness.pipeline.currentState.isListening)
+        #expect(harness.inserter.received == [controllerTidied])
+        #expect(await harness.capture.calls.events == [.start, .stop])
+    }
+
+    @Test("switching to toggle ends hands-free, and the next press starts a fresh dictation")
+    func holdToToggleEndsHandsFree() async {
+        let harness = makeHarness(activation: .holdToTalk)
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+        #expect(await harness.pipeline.currentState.isListening)
+
+        await harness.controller.setActivation(.pressToToggle)
+        #expect(await !harness.pipeline.currentState.isListening)
+        #expect(harness.inserter.received == [controllerTidied])
+
+        await harness.controller.handle(.pressed)
+        #expect(await harness.pipeline.currentState.isListening, "the press opens a new dictation")
+    }
+
+    @Test("switching back to hold after hands-free ended lets a hold open the microphone")
+    func handsFreeDoesNotOutliveTheModeChange() async {
+        let harness = makeHarness(activation: .holdToTalk)
+        await tap(harness)
+        harness.clock.advance(by: .milliseconds(120))
+        await tap(harness)
+
+        await harness.controller.setActivation(.pressToToggle)
+        await harness.controller.setActivation(.holdToTalk)
+        await harness.controller.handle(.pressed)
+
+        #expect(await harness.pipeline.currentState.isListening, "no stale hands-free swallows the press")
+        #expect(await Array(harness.capture.calls.events.suffix(3)) == [.start, .stop, .start])
+    }
+
+    @Test("setting the mode it already has leaves the recording alone")
+    func sameModeChangesNothing() async {
+        let harness = makeHarness(activation: .holdToTalk)
+        await harness.controller.handle(.pressed)
+
+        await harness.controller.setActivation(.holdToTalk)
+
+        #expect(await harness.pipeline.currentState == .recording)
+        #expect(await harness.capture.calls.events == [.start])
+    }
+
+    @Test("a mode change waits behind a queued press, then finishes what that press opened")
+    func modeChangeQueuesBehindAPress() async {
+        let harness = makeHarness(activation: .holdToTalk)
+
+        harness.controller.submit(.pressed)
+        await harness.controller.setActivation(.pressToToggle)
+
+        #expect(await harness.capture.calls.events == [.start, .stop])
+        #expect(await !harness.pipeline.currentState.isListening)
+    }
+
+    @Test("a modifier press still settling is forgotten, so its release under toggle opens nothing")
+    func unsettledPressIsForgotten() async throws {
+        let harness = makeHarness(activation: .holdToTalk)
+        try await harness.controller.start(
+            binding: HotkeyBinding(keyCode: 58, modifiers: [.option, .command, .control]))
+        await harness.controller.handle(.pressed)
+
+        await harness.controller.setActivation(.pressToToggle)
+        await harness.controller.handle(.released)
+
+        #expect(await harness.capture.calls.isEmpty, "the microphone never opened")
+        await harness.controller.stop()
+    }
+}
+
 /// Starting a dictation from something clicked rather than something held.
 @Suite("Dictating from a control")
 struct DictationControllerControlTests {

@@ -146,11 +146,13 @@ struct RegisterTests {
         #expect(register(length: nil, conversational: true).maxTokens == 48)
     }
 
-    @Test("Two lines are not a conversation, and long lines are a document however many there are.")
+    @Test("Two turns are not a conversation, and long turns are a document however many there are.")
     func conversationsNeedShortTurns() {
-        #expect(!Register.isConversation(["hi", "hello"]))
-        #expect(Register.isConversation(["hi", "hello", "how are you?"]))
-        let paragraphs = Array(repeating: String(repeating: "word ", count: 60), count: 5)
+        #expect(!Register.isConversation(["Priya: hi", "Me: hello"]))
+        #expect(Register.isConversation(["Priya: hi", "Me: hello", "Priya: how are you?"]))
+        let paragraphs = (0..<5).map {
+            "\($0 % 2 == 0 ? "Priya" : "Me"): " + String(repeating: "word ", count: 60)
+        }
         #expect(!Register.isConversation(paragraphs))
         #expect(Register.lines(of: "a\n\n  \nb").count == 2)
         #expect(Register.median([]) == nil)

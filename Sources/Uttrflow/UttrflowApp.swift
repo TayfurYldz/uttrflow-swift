@@ -19,13 +19,15 @@ enum UttrflowApp {
         let model = IdleReleasingModel(
             model: MLXCandidateScorer(model: .gemma3),
             idleAfter: IdleRelease.window(physicalMemory: ProcessInfo.processInfo.physicalMemory))
-        // Generation is discretionary: utility priority, and no pass in Low Power Mode or under thermal pressure.
+        // Every use is discretionary: utility priority, and no pass in Low Power Mode or under thermal pressure.
         let generating = DiscretionaryGenerator(
             model, mayRun: { EnergyConditions.current().allowsDiscretionaryWork })
+        let scoring = DiscretionaryModel(
+            model, mayRun: { EnergyConditions.current().allowsDiscretionaryWork })
         let delegate = AppDelegate(
-            scoring: model, generating: generating,
-            prepareModel: { onProgress in try await model.prepare(onProgress: onProgress) },
-            releaseModel: { await model.release() })
+            scoring: scoring, generating: generating,
+            prepareModel: { onProgress in try await scoring.prepare(onProgress: onProgress) },
+            releaseModel: { await scoring.release() })
         application.delegate = delegate
         // Regular, not accessory: Uttrflow has a Dock icon and its window opens at launch.
         application.setActivationPolicy(.regular)

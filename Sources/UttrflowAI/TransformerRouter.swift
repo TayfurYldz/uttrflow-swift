@@ -8,24 +8,28 @@ public struct TransformerRouter: TranscriptCleaning {
     private let preference: [TransformerKind]
     /// What each engine's allowance is measured against; injected so a test need not wait out a hang.
     private let clock: any Clock<Duration>
+    /// The requests handed straight to the rules when the rules are on the route.
+    let rulesAlone: RulesAlone
 
     /// Keeps the engines and the kinds to try; the preference should end in one that never declines.
     public init(
         engines: [any TextTransformationEngine], preference: [TransformerKind],
-        clock: any Clock<Duration> = ContinuousClock()
+        clock: any Clock<Duration> = ContinuousClock(), rulesAlone: RulesAlone = .never
     ) {
         self.engines = engines
         self.preference = preference
         self.clock = clock
+        self.rulesAlone = rulesAlone
     }
 
     /// Builds a router from a stored configuration, keeping only kinds this build has.
     public init(
         engines: [any TextTransformationEngine], configuration: EngineConfiguration,
-        clock: any Clock<Duration> = ContinuousClock()
+        clock: any Clock<Duration> = ContinuousClock(), rulesAlone: RulesAlone = .never
     ) {
         self.init(
-            engines: engines, preference: configuration.resolvedTransformerPreference, clock: clock)
+            engines: engines, preference: configuration.resolvedTransformerPreference, clock: clock,
+            rulesAlone: rulesAlone)
     }
 
     /// The engines that will be tried, in order.
@@ -62,7 +66,7 @@ public struct TransformerRouter: TranscriptCleaning {
     public func transform(
         _ request: TransformationRequest
     ) async throws(TransformationError) -> TransformationResult {
-        let route = orderedEngines
+        let route = candidates(for: request)
         let outcome = await FallbackRunner.firstSuccess(among: route) { [clock] engine in
             guard await engine.availability(for: request).isAvailable else {
                 throw TransformationError.noCapableTransformer
@@ -87,6 +91,15 @@ public struct TransformerRouter: TranscriptCleaning {
         case .exhausted:
             throw .noCapableTransformer
         }
+    }
+
+    /// The engines to try for `request`: the rules alone for a request they finish, otherwise the whole route.
+    private func candidates(for request: TransformationRequest) -> [any TextTransformationEngine] {
+        let ordered = orderedEngines
+        guard rulesAlone.covers(request), let rules = ordered.first(where: { $0.kind == .rules }) else {
+            return ordered
+        }
+        return [rules]
     }
 
     /// The engines that answered and were refused, which is the half of a fallback nothing else records.

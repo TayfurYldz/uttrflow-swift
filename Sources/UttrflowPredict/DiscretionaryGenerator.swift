@@ -38,9 +38,9 @@ public struct DiscretionaryGenerator: CandidateGenerating {
     }
 
     /// Runs the work in a utility task, resumed through a continuation so awaiting it does not raise its priority.
-    static func discretionary(
-        _ work: @escaping @Sendable () async throws -> [String]
-    ) async throws -> [String] {
+    static func discretionary<Value: Sendable>(
+        _ work: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
         let running = Mutex<(task: Task<Void, Never>?, cancelled: Bool)>((nil, false))
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in

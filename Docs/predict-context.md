@@ -69,8 +69,12 @@ milliseconds, not hundreds.
    - `typicalLength`: median length in characters of the user's recent lines here, or of
      the screen's lines when there are none and the screen is a conversation — the
      strongest verbosity signal there is;
-   - `isConversational`: the screen shows at least three non-blank lines and at least 60 %
-     of them are under 200 characters;
+   - `isConversational`: the screen shows at least three non-blank lines, at least 60 % of
+     them under 200 characters, and people taking turns on it — at least three lines opening
+     with a short speaker name and a colon, two or more speakers, one of them speaking twice;
+     or a field named as a message composer ("Type a message", "Message #platform", never a
+     mail's body) beside at least two lines stamped with a time of day. A web page's menus,
+     links and buttons are short lines too, and on their own they are not a conversation;
    - `symbolShare`: the share of visible characters that are neither letters nor digits,
      over `preceding`, the typed text and the recent lines (shell lines sit near 0.14,
      prose under 0.06; the line is 0.10);

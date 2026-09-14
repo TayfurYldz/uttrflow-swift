@@ -42,6 +42,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         case control(CheckedContinuation<Void, Never>)
         /// The press with this id has been held long enough to count.
         case settled(Int)
+        /// A new activation mode, answered once adopted.
+        case activation(HotkeyActivation, CheckedContinuation<Void, Never>)
         /// Answered once everything queued ahead of it has been handled.
         case drained(CheckedContinuation<Void, Never>)
     }
@@ -74,7 +76,8 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
                 guard let self else {
                     // A caller still waiting is answered, so it is not left suspended forever.
                     switch gesture {
-                    case .control(let handled), .drained(let handled): handled.resume()
+                    case .control(let handled), .drained(let handled), .activation(_, let handled):
+                        handled.resume()
                     case .key, .settled: break
                     }
                     continue
@@ -87,6 +90,9 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
                     handled.resume()
                 case .settled(let id):
                     await settle(id)
+                case .activation(let activation, let handled):
+                    await adopt(activation)
+                    handled.resume()
                 case .drained(let handled):
                     handled.resume()
                 }
@@ -123,8 +129,29 @@ public actor DictationController<ClockType: Clock> where ClockType.Duration == D
         monitor.stop()
     }
 
-    public func setActivation(_ activation: HotkeyActivation) {
+    /// Changes the mode, queued behind every gesture, finishing any dictation under way. See Docs/pipeline-gestures.md.
+    public nonisolated func setActivation(_ activation: HotkeyActivation) async {
+        await withCheckedContinuation { handled in
+            // A controller already gone has no queue, so the change is answered at once.
+            guard case .enqueued = gestureSink.yield(.activation(activation, handled)) else {
+                handled.resume()
+                return
+            }
+        }
+    }
+
+    /// Adopts a new mode, ending what the old one started so no microphone outlives the rules that opened it.
+    private func adopt(_ activation: HotkeyActivation) async {
+        guard activation != self.activation else { return }
         self.activation = activation
+        forgetUnsettledPress()
+        pressedAt = nil
+        lastTapEndedAt = nil
+        pressOpenedTheMicrophone = false
+        isHandsFree = false
+        guard await pipeline.currentState.isListening else { return }
+        stopWatchingTheLimit()
+        await pipeline.finishRecording()
     }
 
     public var currentActivation: HotkeyActivation { activation }
