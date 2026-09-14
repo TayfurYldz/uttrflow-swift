@@ -787,8 +787,9 @@ about a second faster because no module is built, and the same fixed prompt give
 after every reload. MLX's active memory after a release is still 0 MB (`gpu-memory --release`).
 
 **The first load does not quantise either.** `QuantizedLoad` creates the model from the same
-type registry, reads the safetensors headers, and swaps every linear layer the snapshot stores
-quantized for a `QuantizedLinear` of unevaluated zeros before `loadWeights` runs, so the quantiser
+type registry, reads the safetensors headers, and swaps each linear layer that the snapshot stores
+with scales in a floating type, and that the configuration quantizes, for a `QuantizedLinear` of
+unevaluated zeros before `loadWeights` runs; any other layer is left to the library, so the quantiser
 skips it and the stored weights replace the zeros with the same shape checks. It then evaluates
 MLX's global random key, which every random initial weight split lazily into a chain of siblings.
 Only the embedding still goes through the quantiser, because `QuantizedEmbedding` has no

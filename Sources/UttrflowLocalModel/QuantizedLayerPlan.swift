@@ -1,5 +1,6 @@
 // Decides which layers are built quantized from the weights on disk, before the weights are read.
 import Foundation
+import MLX
 
 /// The quantized layers a snapshot holds, read from its safetensors headers. See `Docs/performance.md`.
 struct QuantizedLayerPlan: Sendable, Equatable {
@@ -46,6 +47,16 @@ struct QuantizedLayerPlan: Sendable, Equatable {
     /// The element type of the layer's scales, which its placeholder must share.
     func scalesType(_ path: String) -> String? {
         source(of: path).flatMap { dtypes["\($0).scales"] }
+    }
+
+    /// The MLX element type of scales stored under a safetensors type name, or nil for a type scales are never stored in.
+    static func scalesDType(named name: String) -> DType? {
+        switch name {
+        case "F16": .float16
+        case "BF16": .bfloat16
+        case "F32": .float32
+        default: nil
+        }
     }
 
     /// The shapes of a placeholder quantized weight and its scales for a `rows` by `columns` layer.

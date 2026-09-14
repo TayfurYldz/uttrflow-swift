@@ -18,7 +18,7 @@ enum QuantizedLoad {
         if let plan = QuantizedLayerPlan.read(in: directory), let quantization = base.perLayerQuantization {
             build(model, from: plan, quantization: quantization)
         }
-        // Every random initial weight split the global key lazily, and the chain of splits holds itself until the key is evaluated.
+        // Evaluates the global random key, cutting the chain of lazy splits the random initial weights left on it.
         eval(MLXRandom.globalState)
         let built = BuiltModel(model)
         let registry = ModelTypeRegistry<LanguageModel>(creators: [base.modelType: { _ in built.model }])
@@ -34,7 +34,7 @@ enum QuantizedLoad {
         for (path, module) in model.leafModules().flattened() {
             guard let linear = module as? Linear, !(module is Quantized),
                 let (groupSize, bits, mode) = quantization.quantization(layer: path)?.asTuple,
-                let scalesType = plan.scalesType(path).flatMap(Self.dtype)
+                let scalesType = plan.scalesType(path).flatMap(QuantizedLayerPlan.scalesDType)
             else { continue }
             let (rows, columns) = linear.weight.shape2
             let shapes = QuantizedLayerPlan.shapes(
@@ -51,16 +51,6 @@ enum QuantizedLoad {
                 ))
         }
         model.update(modules: ModuleChildren.unflattened(layers))
-    }
-
-    /// The MLX element type a safetensors header names, for the floating types scales are stored in.
-    private static func dtype(_ name: String) -> DType? {
-        switch name {
-        case "F16": .float16
-        case "BF16": .bfloat16
-        case "F32": .float32
-        default: nil
-        }
     }
 }
 

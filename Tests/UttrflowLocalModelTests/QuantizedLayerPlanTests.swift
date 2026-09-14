@@ -1,4 +1,5 @@
 import Foundation
+import MLX
 import Testing
 
 @testable import UttrflowLocalModel
@@ -75,6 +76,14 @@ struct QuantizedLayerPlanTests {
 
         let missing = empty.root.appending(path: "nowhere")
         #expect(QuantizedLayerPlan.read(in: missing) == nil)
+    }
+
+    @Test("Scales stored as a floating type map to MLX's, and any other type builds no placeholder")
+    func scalesTypes() {
+        #expect(QuantizedLayerPlan.scalesDType(named: "F16") == .float16)
+        #expect(QuantizedLayerPlan.scalesDType(named: "BF16") == .bfloat16)
+        #expect(QuantizedLayerPlan.scalesDType(named: "F32") == .float32)
+        #expect(QuantizedLayerPlan.scalesDType(named: "U32") == nil)
     }
 
     @Test("A placeholder is as wide as the packed weight and as many groups as the scales")
