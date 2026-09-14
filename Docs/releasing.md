@@ -5,20 +5,29 @@ one is not a pending task — see [CI, and why the gate is still local](#ci-and-
 
 ## The version
 
-Semantic versioning, in `Resources/Uttrflow-Info.plist`, edited by hand:
+Calendar versioning, in `Resources/Uttrflow-Info.plist`, edited by hand:
 
 | Key | Example | What it is |
 | --- | --- | --- |
-| `CFBundleShortVersionString` | `0.1.0` | The marketing version. Patch for fixes, minor for features, major for breaking changes. |
-| `CFBundleVersion` | `1` | The build counter. Only has to increase; macOS uses it to tell two builds of one version apart. |
+| `CFBundleShortVersionString` | `2026.9.14` | The version people see: the day the release is cut, `YEAR.MONTH.DAY`, no leading zeros. |
+| `CFBundleVersion` | `9` | The build counter. Goes up by one every release; the updater compares this, not the date. |
 
-By hand, because semantic versioning depends on *what changed*, which no script can read.
-Bump it in the commit that cuts the release.
+Bump both in the commit that cuts the release. The tag is `v` and the version, `v2026.9.14`,
+and a candidate for it is `v2026.9.14-rc.1`. A second release on the same day adds a fourth
+number, `2026.9.14.1`; that is the one case outside Apple's three-integer form, and the
+counter still orders it. No leading zeros, because the release workflow compares the tag to
+the plist as text and `2026.09.14` is a different string.
 
-**Calendar versioning was tried and rejected.** `YEAR.MONTH.DAY.HOUR.PATCH` works
+Releases up to `0.5.0` used semantic versioning. Every date version is larger in its first
+number, so nothing that orders versions can place `2026.9.14` below `0.5.0` — and Sparkle
+does not order by it anyway: the appcast's `sparkle:version` is `CFBundleVersion`, and an
+installed copy updates only when that number is larger than its own. That is why the
+counter must keep rising across the change of scheme: 0.5.0 shipped with `8`.
+
+**Five-part calendar versioning was tried and rejected.** `YEAR.MONTH.DAY.HOUR.PATCH` works
 technically — a five-component version signs, verifies `--deep --strict`, and Spotlight
 reports `kMDItemVersion` correctly — but Apple documents these keys as three integers, so
-it is outside spec and the App Store would refuse it. Do not re-propose it.
+it is outside spec and the App Store would refuse it. The date alone is three integers.
 
 ## A test build
 
