@@ -25,8 +25,11 @@ struct LayoutWordsPassTests {
         "numbers the items a spoken number opens",
         arguments: [
             ("we need number one milk number two eggs", "we need\n1. milk\n2. eggs"),
-            ("shopping list number three call the bank", "shopping list\n3. call the bank"),
-            ("we need number twenty one more of them", "we need\n21. more of them"),
+            ("we need number twenty one milk number twenty two eggs", "we need\n21. milk\n22. eggs"),
+            (
+                "then number two call the landlord number three pay the rent",
+                "then\n2. call the landlord\n3. pay the rent"
+            ),
             ("we need number 1 milk number 2 eggs", "we need\n1. milk\n2. eggs"),
         ]
     )
@@ -55,7 +58,10 @@ struct LayoutWordsPassTests {
     @Test(
         "reads neither a layout phrase nor an item number across a sentence end",
         arguments: [
-            ("we need number twenty. One more of them", "we need\n20. One more of them"),
+            (
+                "we need number nineteen milk number twenty. One more of them",
+                "we need\n19. milk\n20. One more of them"
+            ),
             ("I bought something new. Line up here", "I bought something new. Line up here"),
             ("show me what is next. Point two is wrong", "show me what is next. Point two is wrong"),
         ]
@@ -84,6 +90,19 @@ struct LayoutWordsPassTests {
         #expect(cleaned(input, by: sut) == input)
     }
 
+    /// Issue 238: a numbered item inside its sentence is laid out only when an item numbered next to it is said too.
+    @Test(
+        "leaves a lone number inside its sentence as the designator it is",
+        arguments: [
+            "ring number 5 now", "call number 5 please", "check number 7 again",
+            "shopping list number three call the bank", "we need number twenty one more of them",
+            "room number 5 is free and so is room number 7", "take bus number twelve to the station",
+        ]
+    )
+    func leavesALoneDesignator(input: String) {
+        #expect(cleaned(input, by: sut) == input)
+    }
+
     @Test(
         "leaves a number word that opens no item",
         arguments: [
@@ -105,7 +124,7 @@ struct LayoutWordsPassTests {
 
     @Test("records the item mark as a replacement of number and removes every word of the number said")
     func numberingProvenance() {
-        let draft = sut.apply(Draft(text: "milk number twenty one eggs"))
+        let draft = sut.apply(Draft(text: "milk number twenty one eggs number twenty two bread"))
         #expect(draft.words[1].state == .replaced(by: LayoutWordsPass.id, from: "number"))
         #expect(draft.words[2].state == .removed(by: LayoutWordsPass.id))
         #expect(draft.words[3].state == .removed(by: LayoutWordsPass.id))

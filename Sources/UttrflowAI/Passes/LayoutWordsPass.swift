@@ -18,12 +18,14 @@ public struct LayoutWordsPass: CleaningPass {
     public func apply(_ draft: Draft) -> Draft {
         var draft = draft
         var live = draft.presentIndices
+        let numbered = Set(live.indices.compactMap { itemValue(at: $0, in: live, of: draft) })
         var position = 0
         while position < live.count {
             guard
                 let found = opening(mark(at: position, in: live, of: draft), at: position),
                 position + found.length < live.count,
-                isUsed(spanning: found.length, at: position, in: live, of: draft)
+                isUsed(spanning: found.length, at: position, in: live, of: draft),
+                isCorroborated(at: position, in: live, of: draft, among: numbered)
             else {
                 position += 1
                 continue
@@ -55,6 +57,24 @@ public struct LayoutWordsPass: CleaningPass {
         }
         let last = draft.shape(at: live[position + length - 1])
         return last.endsClause && !last.endsSentence
+    }
+
+    /// Whether a numbered item inside its sentence has a neighbouring item said beside it, since a lone one is a designator.
+    private func isCorroborated(
+        at position: Int, in live: [Int], of draft: Draft, among numbered: Set<Int>
+    ) -> Bool {
+        guard position > 0, !draft.shape(at: live[position - 1]).endsSentence,
+            let value = itemValue(at: position, in: live, of: draft)
+        else { return true }
+        return numbered.contains(value - 1) || numbered.contains(value + 1)
+    }
+
+    /// The number of the item "number" opens at `position`, or nil where no item opens.
+    private func itemValue(at position: Int, in live: [Int], of draft: Draft) -> Int? {
+        guard draft.shape(at: live[position]).key == Self.numbering, position + 1 < live.count else {
+            return nil
+        }
+        return itemNumber(at: position + 1, in: live, of: draft)?.value
     }
 
     /// The layout the words at `position` become: one of the fixed phrases, or a numbered item.
