@@ -36,7 +36,7 @@ private final class Fractions: Sendable {
 }
 
 /// A Hugging Face cache laid out as the hub leaves it: blobs, a ref and a snapshot of links.
-private struct FakeCache {
+struct FakeCache {
     let root: URL
     let identifier = "example-org/tiny-model"
     let commit = String(repeating: "a1", count: 20)
